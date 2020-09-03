@@ -29,7 +29,11 @@ namespace ActivitySourceInstrumentedLibrary
         public void ClassAMethod()
         {
             using var activity = ActivitySource.StartActivity(nameof(this.ClassAMethod));
-            activity?.AddTag("CustomTag", "CustomValue");
+
+            if (activity != null && activity.IsAllDataRequested)
+            {
+                activity?.SetTag("CustomTag", "CustomValue");
+            }
 
             // This will suppress the instrumentation of ClassB.
             // Comment this line out to enable instrumentation of ClassB.

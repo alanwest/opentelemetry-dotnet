@@ -40,7 +40,7 @@ namespace LegacyInstrumentedLibrary.Instrumentation
 
             if (activity.IsAllDataRequested)
             {
-                activity.AddTag("CustomTag", "CustomValue");
+                activity.SetTag("CustomTag", "CustomValue");
             }
         }
 

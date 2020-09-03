@@ -28,7 +28,11 @@ namespace ActivitySourceInstrumentedLibrary
         public void ClassBMethod()
         {
             using var activity = ActivitySource.StartActivity(nameof(this.ClassBMethod));
-            activity?.AddTag("CustomTag", "CustomValue");
+
+            if (activity != null && activity.IsAllDataRequested)
+            {
+                activity?.SetTag("CustomTag", "CustomValue");
+            }
         }
     }
 }
