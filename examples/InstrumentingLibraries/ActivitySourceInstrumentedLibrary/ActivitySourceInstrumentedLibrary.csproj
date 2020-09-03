@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- A reference to System.Diagnostics.DiagnosticSource is required to instrument this library with ActivitySource. -->
+    <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="5.0.0-rc.1.20428.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A reference to the OpenTelemetry SDK is included to demonstrate the ability to suppress instrumentation. -->
+    <ProjectReference Include="..\..\..\src\OpenTelemetry\OpenTelemetry.csproj" />
+  </ItemGroup>
+
+</Project>

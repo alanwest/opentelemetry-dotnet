@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- This library is instrumented with DiagnosticSource and does not require a reference to OpenTelemetry.
+         This reference is included here because the OpenTelemetry instrumentation is included in this same project.
+         The instrumentation would normally be in a separate assembly. -->
+    <ProjectReference Include="..\..\..\src\OpenTelemetry\OpenTelemetry.csproj" />
+  </ItemGroup>
+
+</Project>
