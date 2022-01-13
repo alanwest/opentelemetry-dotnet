@@ -69,6 +69,34 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests
             Assert.Equal(ExportResult.Success, delegatingExporter.ExportResults[0]);
         }
 
+        [Fact]
+        public void BeepBoop()
+        {
+            var exporterOptions = new OtlpExporterOptions
+            {
+                Endpoint = new Uri($"http://localhost:5286"),
+            };
+
+            var otlpExporter = new OtlpTraceExporter(exporterOptions);
+            var delegatingExporter = new DelegatingTestExporter<Activity>(otlpExporter);
+            var exportActivityProcessor = new SimpleActivityExportProcessor(delegatingExporter);
+
+            var activitySourceName = "otlp.collector.test";
+
+            var builder = Sdk.CreateTracerProviderBuilder()
+                .AddSource(activitySourceName)
+                .AddProcessor(exportActivityProcessor);
+
+            using var tracerProvider = builder.Build();
+
+            var source = new ActivitySource(activitySourceName);
+            var activity = source.StartActivity($"foogitywowwow Test Activity");
+            activity?.Stop();
+
+            Assert.Single(delegatingExporter.ExportResults);
+            Assert.Equal(ExportResult.Success, delegatingExporter.ExportResults[0]);
+        }
+
         [Trait("CategoryName", "CollectorIntegrationTests")]
         [SkipUnlessEnvVarFoundFact(CollectorHostnameEnvVarName)]
         public void ConstructingGrpcExporterFailsWhenHttp2UnencryptedSupportIsDisabledForNetcoreapp31()
