@@ -16,6 +16,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Linq;
 using OpenTelemetry.Tests;
 using OpenTelemetry.Trace;
 using Xunit;
@@ -67,6 +68,44 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests
 
             Assert.Single(delegatingExporter.ExportResults);
             Assert.Equal(ExportResult.Success, delegatingExporter.ExportResults[0]);
+        }
+
+        [Fact]
+        public async System.Threading.Tasks.Task BeepBoop()
+        {
+            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
+            var exporterOptions = new OtlpExporterOptions
+            {
+                Endpoint = new Uri($"http://localhost:5286"),
+            };
+
+            var otlpExporter = new OtlpTraceExporter(exporterOptions);
+            var delegatingExporter = new DelegatingTestExporter<Activity>(otlpExporter);
+            var exportActivityProcessor = new SimpleActivityExportProcessor(delegatingExporter);
+
+            var activitySourceName = "otlp.collector.test";
+
+            var builder = Sdk.CreateTracerProviderBuilder()
+                .AddSource(activitySourceName)
+                .AddProcessor(exportActivityProcessor);
+
+            using var tracerProvider = builder.Build();
+
+            using var httpClient = new System.Net.Http.HttpClient();
+
+            var codes = new[] { Grpc.Core.StatusCode.Cancelled, Grpc.Core.StatusCode.Unimplemented, Grpc.Core.StatusCode.Unavailable };
+            await httpClient.GetAsync($"http://localhost:5287/MockCollector/SetResponseCodes?responseCodes={string.Join(",", codes.Select(x => (int)x))}");
+
+            var source = new ActivitySource(activitySourceName);
+            var activity = source.StartActivity($"foogitywowwow Test Activity");
+            activity?.Stop();
+
+            var requestsReceived = await httpClient.GetStringAsync("http://localhost:5287/MockCollector/GetNumberOfRequests");
+
+            Assert.Single(delegatingExporter.ExportResults);
+            Assert.Equal(ExportResult.Failure, delegatingExporter.ExportResults[0]);
+            Assert.Equal("3", requestsReceived);
         }
 
         [Trait("CategoryName", "CollectorIntegrationTests")]

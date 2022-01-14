@@ -45,6 +45,7 @@ namespace OpenTelemetry.Exporter
 #if NETSTANDARD2_1 || NET5_0_OR_GREATER
             // The specification does not dictate the parameters of the default retry policy.
             // These defaults are borrowed from opentelemetry-java.
+            // For now, the policy is hard-coded but ought to be configurable.
             var retryPolicy = new RetryPolicy
             {
                 // https://github.com/open-telemetry/opentelemetry-java/blob/6f755cc8128f8077643b4990327c22b293c46e45/exporters/otlp/common/src/main/java/io/opentelemetry/exporter/otlp/internal/retry/RetryPolicyBuilder.java#L19-L22
