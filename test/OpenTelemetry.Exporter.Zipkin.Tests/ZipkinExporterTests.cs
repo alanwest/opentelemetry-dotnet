@@ -23,6 +23,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Exporter.Zipkin.Implementation;
 using OpenTelemetry.Resources;
@@ -35,7 +36,7 @@ namespace OpenTelemetry.Exporter.Zipkin.Tests
     public class ZipkinExporterTests : IDisposable
     {
         private const string TraceId = "e8ea7e9ac72de94e91fabc613f9686b2";
-        private static readonly ConcurrentDictionary<Guid, string> Responses = new ConcurrentDictionary<Guid, string>();
+        private static readonly ConcurrentDictionary<Guid, string> Responses = new();
 
         private readonly IDisposable testServer;
         private readonly string testServerHost;
@@ -81,6 +82,28 @@ namespace OpenTelemetry.Exporter.Zipkin.Tests
         public void Dispose()
         {
             this.testServer.Dispose();
+            GC.SuppressFinalize(this);
+        }
+
+        [Fact]
+        public void AddAddZipkinExporterNamedOptionsSupported()
+        {
+            int defaultExporterOptionsConfigureOptionsInvocations = 0;
+            int namedExporterOptionsConfigureOptionsInvocations = 0;
+
+            using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+                .ConfigureServices(services =>
+                {
+                    services.Configure<ZipkinExporterOptions>(o => defaultExporterOptionsConfigureOptionsInvocations++);
+
+                    services.Configure<ZipkinExporterOptions>("Exporter2", o => namedExporterOptionsConfigureOptionsInvocations++);
+                })
+                .AddZipkinExporter()
+                .AddZipkinExporter("Exporter2", o => { })
+                .Build();
+
+            Assert.Equal(1, defaultExporterOptionsConfigureOptionsInvocations);
+            Assert.Equal(1, namedExporterOptionsConfigureOptionsInvocations);
         }
 
         [Fact]
@@ -91,7 +114,7 @@ namespace OpenTelemetry.Exporter.Zipkin.Tests
         }
 
         [Fact]
-        public void SuppresssesInstrumentation()
+        public void SuppressesInstrumentation()
         {
             const string ActivitySourceName = "zipkin.test";
             Guid requestId = Guid.NewGuid();
@@ -183,6 +206,23 @@ namespace OpenTelemetry.Exporter.Zipkin.Tests
             {
                 Environment.SetEnvironmentVariable(ZipkinExporterOptions.ZipkinEndpointEnvVar, null);
             }
+        }
+
+        [Fact]
+        public void EndpointConfigurationUsingIConfiguration()
+        {
+            var values = new Dictionary<string, string>()
+            {
+                [ZipkinExporterOptions.ZipkinEndpointEnvVar] = "http://custom-endpoint:12345",
+            };
+
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(values)
+                .Build();
+
+            var options = new ZipkinExporterOptions(configuration);
+
+            Assert.Equal(new Uri("http://custom-endpoint:12345"), options.Endpoint);
         }
 
         [Fact]
@@ -351,14 +391,14 @@ namespace OpenTelemetry.Exporter.Zipkin.Tests
                     break;
                 case StatusCode.Error:
                     statusTag = $@"""{SpanAttributeConstants.StatusCodeKey}"":""ERROR"",";
-                    errorTag = $@",""{ZipkinActivityConversionExtensions.ZipkinErrorFlagTagName}"":""{statusDescription}""";
+                    errorTag = $@"""{ZipkinActivityConversionExtensions.ZipkinErrorFlagTagName}"":""{statusDescription}"",";
                     break;
                 default:
                     throw new NotSupportedException();
             }
 
             Assert.Equal(
-                $@"[{{""traceId"":""{traceId}"",""name"":""Name"",{parentId}""id"":""{ZipkinActivityConversionExtensions.EncodeSpanId(context.SpanId)}"",""kind"":""CLIENT"",""timestamp"":{timestamp},""duration"":60000000,""localEndpoint"":{{""serviceName"":""{serviceName}""{ipInformation}}},""remoteEndpoint"":{{""serviceName"":""http://localhost:44312/""}},""annotations"":[{{""timestamp"":{eventTimestamp},""value"":""Event1""}},{{""timestamp"":{eventTimestamp},""value"":""Event2""}}],""tags"":{{{resourceTags}""stringKey"":""value"",""longKey"":""1"",""longKey2"":""1"",""doubleKey"":""1"",""doubleKey2"":""1"",""longArrayKey"":""1,2"",""boolKey"":""true"",""boolArrayKey"":""true,false"",""http.host"":""http://localhost:44312/"",{statusTag}""otel.library.name"":""CreateTestActivity"",""peer.service"":""http://localhost:44312/""{errorTag}}}}}]",
+                $@"[{{""traceId"":""{traceId}"",""name"":""Name"",{parentId}""id"":""{ZipkinActivityConversionExtensions.EncodeSpanId(context.SpanId)}"",""kind"":""CLIENT"",""timestamp"":{timestamp},""duration"":60000000,""localEndpoint"":{{""serviceName"":""{serviceName}""{ipInformation}}},""remoteEndpoint"":{{""serviceName"":""http://localhost:44312/""}},""annotations"":[{{""timestamp"":{eventTimestamp},""value"":""Event1""}},{{""timestamp"":{eventTimestamp},""value"":""Event2""}}],""tags"":{{{resourceTags}""stringKey"":""value"",""longKey"":""1"",""longKey2"":""1"",""doubleKey"":""1"",""doubleKey2"":""1"",""longArrayKey"":""[1,2]"",""boolKey"":""true"",""boolArrayKey"":""[true,false]"",""http.host"":""http://localhost:44312/"",{statusTag}{errorTag}""otel.library.name"":""CreateTestActivity"",""peer.service"":""http://localhost:44312/""}}}}]",
                 Responses[requestId]);
         }
 

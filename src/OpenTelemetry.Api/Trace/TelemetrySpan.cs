@@ -27,7 +27,7 @@ namespace OpenTelemetry.Trace
     /// <remarks>TelemetrySpan is a wrapper around <see cref="Activity"/> class.</remarks>
     public class TelemetrySpan : IDisposable
     {
-        internal static readonly TelemetrySpan NoopInstance = new TelemetrySpan(null);
+        internal static readonly TelemetrySpan NoopInstance = new(null);
         internal readonly Activity Activity;
 
         internal TelemetrySpan(Activity activity)
@@ -61,6 +61,24 @@ namespace OpenTelemetry.Trace
             get
             {
                 return this.Activity != null && this.Activity.IsAllDataRequested;
+            }
+        }
+
+        /// <summary>
+        /// Gets the identity of the parent span id, if any.
+        /// </summary>
+        public ActivitySpanId ParentSpanId
+        {
+            get
+            {
+                if (this.Activity == null)
+                {
+                    return default;
+                }
+                else
+                {
+                    return this.Activity.ParentSpanId;
+                }
             }
         }
 

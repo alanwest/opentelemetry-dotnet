@@ -2,12 +2,67 @@
 
 ## Unreleased
 
+## 1.0.0-rc9.8
+
+Released 2022-Oct-17
+
+## 1.0.0-rc9.7
+
+Released 2022-Sep-29
+
+* Dependency injection support when configuring
+  `TracerProvider` has been moved into the SDK.
+  ([#3533](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3533))
+
+* Dependency injection support when configuring
+  `MeterProvider` has been moved into the SDK.
+  ([#3646](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3646))
+
+## 1.0.0-rc9.6
+
+Released 2022-Aug-18
+
+## 1.0.0-rc9.5
+
+Released 2022-Aug-02
+
+## 1.0.0-rc9.4
+
+Released 2022-Jun-03
+
+## 1.0.0-rc9.3
+
+Released 2022-Apr-15
+
+## 1.0.0-rc9.2
+
+Released 2022-Apr-12
+
+## 1.0.0-rc9.1
+
+Released 2022-Mar-30
+
+## 1.0.0-rc10 (broken. use 1.0.0-rc9.1 and newer)
+
+Released 2022-Mar-04
+
+* Fixes an issue where the initialization of some aspects of the SDK can be
+  delayed when using the `AddOpenTelemetryTracing` and
+  `AddOpenTelemetryMetrics` methods. Namely, self-diagnostics and the default
+  context propagator responsible for propagating trace context and baggage.
+  ([#2901](https://github.com/open-telemetry/opentelemetry-dotnet/pull/2901))
+
+## 1.0.0-rc9
+
+Released 2022-Feb-02
+
 ## 1.0.0-rc8
 
 Released 2021-Oct-08
 
 * Removes upper constraint for Microsoft.Extensions.Hosting.Abstractions
-  dependency. ([#2179](https://github.com/open-telemetry/opentelemetry-dotnet/pull/2179))
+  dependency.
+  ([#2179](https://github.com/open-telemetry/opentelemetry-dotnet/pull/2179))
 
 * Added `AddOpenTelemetryMetrics` extensions on `IServiceCollection` to register
   OpenTelemetry `MeterProvider` with application services. Added

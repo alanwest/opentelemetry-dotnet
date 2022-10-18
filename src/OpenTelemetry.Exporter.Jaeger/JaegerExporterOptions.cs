@@ -17,6 +17,7 @@
 using System;
 using System.Diagnostics;
 using System.Net.Http;
+using Microsoft.Extensions.Configuration;
 using OpenTelemetry.Internal;
 using OpenTelemetry.Trace;
 
@@ -35,38 +36,55 @@ namespace OpenTelemetry.Exporter
     {
         internal const int DefaultMaxPayloadSizeInBytes = 4096;
 
-        internal const string OtelProtocolEnvVarKey = "OTEL_EXPORTER_JAEGER_PROTOCOL";
+        internal const string OTelProtocolEnvVarKey = "OTEL_EXPORTER_JAEGER_PROTOCOL";
         internal const string OTelAgentHostEnvVarKey = "OTEL_EXPORTER_JAEGER_AGENT_HOST";
         internal const string OTelAgentPortEnvVarKey = "OTEL_EXPORTER_JAEGER_AGENT_PORT";
         internal const string OTelEndpointEnvVarKey = "OTEL_EXPORTER_JAEGER_ENDPOINT";
+        internal const string DefaultJaegerEndpoint = "http://localhost:14268/api/traces";
 
         internal static readonly Func<HttpClient> DefaultHttpClientFactory = () => new HttpClient();
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="JaegerExporterOptions"/> class.
+        /// </summary>
         public JaegerExporterOptions()
+            : this(new ConfigurationBuilder().AddEnvironmentVariables().Build())
         {
-            if (EnvironmentVariableHelper.LoadString(OtelProtocolEnvVarKey, out string protocolEnvVar)
-                && Enum.TryParse(protocolEnvVar, ignoreCase: true, out JaegerExportProtocol protocol))
+        }
+
+        internal JaegerExporterOptions(IConfiguration configuration)
+        {
+            if (configuration.TryGetValue<JaegerExportProtocol>(
+                OTelProtocolEnvVarKey,
+                JaegerExporterProtocolParser.TryParse,
+                out var protocol))
             {
                 this.Protocol = protocol;
             }
 
-            if (EnvironmentVariableHelper.LoadString(OTelAgentHostEnvVarKey, out string agentHostEnvVar))
+            if (configuration.TryGetStringValue(OTelAgentHostEnvVarKey, out var agentHost))
             {
-                this.AgentHost = agentHostEnvVar;
+                this.AgentHost = agentHost;
             }
 
-            if (EnvironmentVariableHelper.LoadNumeric(OTelAgentPortEnvVarKey, out int agentPortEnvVar))
+            if (configuration.TryGetIntValue(OTelAgentPortEnvVarKey, out var agentPort))
             {
-                this.AgentPort = agentPortEnvVar;
+                this.AgentPort = agentPort;
             }
 
-            if (EnvironmentVariableHelper.LoadString(OTelEndpointEnvVarKey, out string endpointEnvVar)
-                && Uri.TryCreate(endpointEnvVar, UriKind.Absolute, out Uri endpoint))
+            if (configuration.TryGetUriValue(OTelEndpointEnvVarKey, out var endpoint))
             {
                 this.Endpoint = endpoint;
             }
+
+            this.BatchExportProcessorOptions = new BatchExportActivityProcessorOptions(configuration);
         }
 
+        /// <summary>
+        /// Gets or sets the <see cref="JaegerExportProtocol"/> to use when
+        /// communicating to Jaeger. Default value: <see
+        /// cref="JaegerExportProtocol.UdpCompactThrift"/>.
+        /// </summary>
         public JaegerExportProtocol Protocol { get; set; } = JaegerExportProtocol.UdpCompactThrift;
 
         /// <summary>
@@ -80,9 +98,10 @@ namespace OpenTelemetry.Exporter
         public int AgentPort { get; set; } = 6831;
 
         /// <summary>
-        /// Gets or sets the Jaeger HTTP endpoint. Default value: "http://localhost:14268".
+        /// Gets or sets the Jaeger HTTP endpoint. Default value: "http://localhost:14268/api/traces".
+        /// Typically https://jaeger-server-name:14268/api/traces.
         /// </summary>
-        public Uri Endpoint { get; set; } = new Uri("http://localhost:14268");
+        public Uri Endpoint { get; set; } = new Uri(DefaultJaegerEndpoint);
 
         /// <summary>
         /// Gets or sets the maximum payload size in bytes. Default value: 4096.
@@ -97,7 +116,7 @@ namespace OpenTelemetry.Exporter
         /// <summary>
         /// Gets or sets the BatchExportProcessor options. Ignored unless ExportProcessorType is BatchExporter.
         /// </summary>
-        public BatchExportProcessorOptions<Activity> BatchExportProcessorOptions { get; set; } = new BatchExportActivityProcessorOptions();
+        public BatchExportProcessorOptions<Activity> BatchExportProcessorOptions { get; set; }
 
         /// <summary>
         /// Gets or sets the factory function called to create the <see

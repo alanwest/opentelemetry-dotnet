@@ -14,7 +14,6 @@
 // limitations under the License.
 // </copyright>
 
-#if NETCOREAPP3_1
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -24,10 +23,9 @@ using OpenTelemetry.Logs;
 
 namespace Benchmarks.Logs
 {
-    [MemoryDiagnoser]
     public class LogScopeBenchmarks
     {
-        private readonly LoggerExternalScopeProvider scopeProvider = new LoggerExternalScopeProvider();
+        private readonly LoggerExternalScopeProvider scopeProvider = new();
 
         private readonly Action<LogRecordScope, object> callback = (LogRecordScope scope, object state) =>
         {
@@ -58,6 +56,7 @@ namespace Benchmarks.Logs
                     new KeyValuePair<string, object>("item5", "value5"),
                 }));
 
+#pragma warning disable CS0618 // Type or member is obsolete
             this.logRecord = new LogRecord(
                 this.scopeProvider,
                 DateTime.UtcNow,
@@ -68,6 +67,7 @@ namespace Benchmarks.Logs
                 null,
                 null,
                 null);
+#pragma warning restore CS0618 // Type or member is obsolete
         }
 
         [Benchmark]
@@ -77,4 +77,3 @@ namespace Benchmarks.Logs
         }
     }
 }
-#endif

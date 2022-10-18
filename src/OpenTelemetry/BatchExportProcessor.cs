@@ -14,8 +14,11 @@
 // limitations under the License.
 // </copyright>
 
+#nullable enable
+
 using System;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using OpenTelemetry.Internal;
 
@@ -33,14 +36,15 @@ namespace OpenTelemetry
         internal const int DefaultExporterTimeoutMilliseconds = 30000;
         internal const int DefaultMaxExportBatchSize = 512;
 
+        internal readonly int MaxExportBatchSize;
+
         private readonly CircularBuffer<T> circularBuffer;
         private readonly int scheduledDelayMilliseconds;
         private readonly int exporterTimeoutMilliseconds;
-        private readonly int maxExportBatchSize;
         private readonly Thread exporterThread;
-        private readonly AutoResetEvent exportTrigger = new AutoResetEvent(false);
-        private readonly ManualResetEvent dataExportedNotification = new ManualResetEvent(false);
-        private readonly ManualResetEvent shutdownTrigger = new ManualResetEvent(false);
+        private readonly AutoResetEvent exportTrigger = new(false);
+        private readonly ManualResetEvent dataExportedNotification = new(false);
+        private readonly ManualResetEvent shutdownTrigger = new(false);
         private long shutdownDrainTarget = long.MaxValue;
         private long droppedCount;
         private bool disposed;
@@ -61,15 +65,15 @@ namespace OpenTelemetry
             int maxExportBatchSize = DefaultMaxExportBatchSize)
             : base(exporter)
         {
-            Guard.Range(maxQueueSize, nameof(maxQueueSize), min: 1);
-            Guard.Range(maxExportBatchSize, nameof(maxExportBatchSize), min: 1, max: maxQueueSize, maxName: nameof(maxQueueSize));
-            Guard.Range(scheduledDelayMilliseconds, nameof(scheduledDelayMilliseconds), min: 1);
-            Guard.Range(exporterTimeoutMilliseconds, nameof(exporterTimeoutMilliseconds), min: 0);
+            Guard.ThrowIfOutOfRange(maxQueueSize, min: 1);
+            Guard.ThrowIfOutOfRange(maxExportBatchSize, min: 1, max: maxQueueSize, maxName: nameof(maxQueueSize));
+            Guard.ThrowIfOutOfRange(scheduledDelayMilliseconds, min: 1);
+            Guard.ThrowIfOutOfRange(exporterTimeoutMilliseconds, min: 0);
 
             this.circularBuffer = new CircularBuffer<T>(maxQueueSize);
             this.scheduledDelayMilliseconds = scheduledDelayMilliseconds;
             this.exporterTimeoutMilliseconds = exporterTimeoutMilliseconds;
-            this.maxExportBatchSize = maxExportBatchSize;
+            this.MaxExportBatchSize = maxExportBatchSize;
             this.exporterThread = new Thread(new ThreadStart(this.ExporterProc))
             {
                 IsBackground = true,
@@ -93,21 +97,35 @@ namespace OpenTelemetry
         /// </summary>
         internal long ProcessedCount => this.circularBuffer.RemovedCount;
 
-        /// <inheritdoc/>
-        protected override void OnExport(T data)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool TryExport(T data)
         {
             if (this.circularBuffer.TryAdd(data, maxSpinCount: 50000))
             {
-                if (this.circularBuffer.Count >= this.maxExportBatchSize)
+                if (this.circularBuffer.Count >= this.MaxExportBatchSize)
                 {
-                    this.exportTrigger.Set();
+                    try
+                    {
+                        this.exportTrigger.Set();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                    }
                 }
 
-                return; // enqueue succeeded
+                return true; // enqueue succeeded
             }
 
             // either the queue is full or exceeded the spin limit, drop the item on the floor
             Interlocked.Increment(ref this.droppedCount);
+
+            return false;
+        }
+
+        /// <inheritdoc/>
+        protected override void OnExport(T data)
+        {
+            this.TryExport(data);
         }
 
         /// <inheritdoc/>
@@ -121,7 +139,14 @@ namespace OpenTelemetry
                 return true; // nothing to flush
             }
 
-            this.exportTrigger.Set();
+            try
+            {
+                this.exportTrigger.Set();
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
 
             if (timeoutMilliseconds == 0)
             {
@@ -186,7 +211,15 @@ namespace OpenTelemetry
         protected override bool OnShutdown(int timeoutMilliseconds)
         {
             this.shutdownDrainTarget = this.circularBuffer.AddedCount;
-            this.shutdownTrigger.Set();
+
+            try
+            {
+                this.shutdownTrigger.Set();
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
 
             OpenTelemetrySdkEventSource.Log.DroppedExportProcessorItems(this.GetType().Name, this.exporter.GetType().Name, this.droppedCount);
 
@@ -232,7 +265,7 @@ namespace OpenTelemetry
             while (true)
             {
                 // only wait when the queue doesn't have enough items, otherwise keep busy and send data continuously
-                if (this.circularBuffer.Count < this.maxExportBatchSize)
+                if (this.circularBuffer.Count < this.MaxExportBatchSize)
                 {
                     try
                     {
@@ -240,19 +273,28 @@ namespace OpenTelemetry
                     }
                     catch (ObjectDisposedException)
                     {
+                        // the exporter is somehow disposed before the worker thread could finish its job
                         return;
                     }
                 }
 
                 if (this.circularBuffer.Count > 0)
                 {
-                    using (var batch = new Batch<T>(this.circularBuffer, this.maxExportBatchSize))
+                    using (var batch = new Batch<T>(this.circularBuffer, this.MaxExportBatchSize))
                     {
                         this.exporter.Export(batch);
                     }
 
-                    this.dataExportedNotification.Set();
-                    this.dataExportedNotification.Reset();
+                    try
+                    {
+                        this.dataExportedNotification.Set();
+                        this.dataExportedNotification.Reset();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // the exporter is somehow disposed before the worker thread could finish its job
+                        return;
+                    }
                 }
 
                 if (this.circularBuffer.RemovedCount >= this.shutdownDrainTarget)

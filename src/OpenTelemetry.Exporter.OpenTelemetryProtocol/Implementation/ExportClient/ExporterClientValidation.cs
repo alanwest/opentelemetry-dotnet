@@ -22,7 +22,7 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExportClie
     {
         internal static void EnsureUnencryptedSupportIsEnabled(OtlpExporterOptions options)
         {
-            var version = System.Environment.Version;
+            var version = Environment.Version;
 
             // This verification is only required for .NET Core 3.x
             if (version.Major != 3)
@@ -30,7 +30,7 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExportClie
                 return;
             }
 
-            if (options.Endpoint.Scheme.Equals("http", StringComparison.InvariantCultureIgnoreCase))
+            if (options.Endpoint.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase))
             {
                 if (AppContext.TryGetSwitch(
                         "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", out var unencryptedIsSupported) == false

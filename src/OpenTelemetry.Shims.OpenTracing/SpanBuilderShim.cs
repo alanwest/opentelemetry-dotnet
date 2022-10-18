@@ -16,7 +16,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using OpenTelemetry.Internal;
 using OpenTelemetry.Trace;
 using OpenTracing;
@@ -43,20 +42,12 @@ namespace OpenTelemetry.Shims.OpenTracing
         /// <summary>
         /// The OpenTelemetry links. These correspond loosely to OpenTracing references.
         /// </summary>
-        private readonly List<Link> links = new List<Link>();
+        private readonly List<Link> links = new();
 
         /// <summary>
         /// The OpenTelemetry attributes. These correspond to OpenTracing Tags.
         /// </summary>
-        private readonly List<KeyValuePair<string, object>> attributes = new List<KeyValuePair<string, object>>();
-
-        /// <summary>
-        /// The set of operation names for System.Diagnostics.Activity based automatic instrumentations that indicate a root span.
-        /// </summary>
-        private readonly IList<string> rootOperationNamesForActivityBasedAutoInstrumentations = new List<string>
-        {
-            "Microsoft.AspNetCore.Hosting.HttpRequestIn",
-        };
+        private readonly List<KeyValuePair<string, object>> attributes = new();
 
         /// <summary>
         /// The parent as an TelemetrySpan, if any.
@@ -79,15 +70,14 @@ namespace OpenTelemetry.Shims.OpenTracing
 
         private bool error;
 
-        public SpanBuilderShim(Tracer tracer, string spanName, IList<string> rootOperationNamesForActivityBasedAutoInstrumentations = null)
+        public SpanBuilderShim(Tracer tracer, string spanName)
         {
-            Guard.Null(tracer, nameof(tracer));
-            Guard.Null(spanName, nameof(spanName));
+            Guard.ThrowIfNull(tracer);
+            Guard.ThrowIfNull(spanName);
 
             this.tracer = tracer;
             this.spanName = spanName;
             this.ScopeManager = new ScopeManagerShim(this.tracer);
-            this.rootOperationNamesForActivityBasedAutoInstrumentations = rootOperationNamesForActivityBasedAutoInstrumentations ?? this.rootOperationNamesForActivityBasedAutoInstrumentations;
         }
 
         private IScopeManager ScopeManager { get; }
@@ -130,7 +120,7 @@ namespace OpenTelemetry.Shims.OpenTracing
                 return this;
             }
 
-            Guard.Null(referenceType, nameof(referenceType));
+            Guard.ThrowIfNull(referenceType);
 
             // TODO There is no relation between OpenTracing.References (referenceType) and OpenTelemetry Link
             var actualContext = GetOpenTelemetrySpanContext(referencedContext);
@@ -171,13 +161,6 @@ namespace OpenTelemetry.Shims.OpenTracing
             else if (this.parentSpanContext.IsValid)
             {
                 span = this.tracer.StartSpan(this.spanName, this.spanKind, this.parentSpanContext, default, this.links, this.explicitStartTime ?? default);
-            }
-            else if (this.parentSpan == null && !this.parentSpanContext.IsValid && Activity.Current != null && Activity.Current.IdFormat == ActivityIdFormat.W3C)
-            {
-                if (this.rootOperationNamesForActivityBasedAutoInstrumentations.Contains(Activity.Current.OperationName))
-                {
-                    span = Tracer.CurrentSpan;
-                }
             }
 
             if (span == null)
@@ -279,7 +262,7 @@ namespace OpenTelemetry.Shims.OpenTracing
         /// <inheritdoc/>
         public ISpanBuilder WithTag(global::OpenTracing.Tag.BooleanTag tag, bool value)
         {
-            Guard.Null(tag?.Key, $"{nameof(tag)}?.{nameof(tag.Key)}");
+            Guard.ThrowIfNull(tag?.Key);
 
             return this.WithTag(tag.Key, value);
         }
@@ -287,7 +270,7 @@ namespace OpenTelemetry.Shims.OpenTracing
         /// <inheritdoc/>
         public ISpanBuilder WithTag(global::OpenTracing.Tag.IntOrStringTag tag, string value)
         {
-            Guard.Null(tag?.Key, $"{nameof(tag)}?.{nameof(tag.Key)}");
+            Guard.ThrowIfNull(tag?.Key);
 
             if (int.TryParse(value, out var result))
             {
@@ -300,7 +283,7 @@ namespace OpenTelemetry.Shims.OpenTracing
         /// <inheritdoc/>
         public ISpanBuilder WithTag(global::OpenTracing.Tag.IntTag tag, int value)
         {
-            Guard.Null(tag?.Key, $"{nameof(tag)}?.{nameof(tag.Key)}");
+            Guard.ThrowIfNull(tag?.Key);
 
             return this.WithTag(tag.Key, value);
         }
@@ -308,7 +291,7 @@ namespace OpenTelemetry.Shims.OpenTracing
         /// <inheritdoc/>
         public ISpanBuilder WithTag(global::OpenTracing.Tag.StringTag tag, string value)
         {
-            Guard.Null(tag?.Key, $"{nameof(tag)}?.{nameof(tag.Key)}");
+            Guard.ThrowIfNull(tag?.Key);
 
             return this.WithTag(tag.Key, value);
         }
@@ -321,7 +304,7 @@ namespace OpenTelemetry.Shims.OpenTracing
         /// <exception cref="ArgumentException">span is not a valid SpanShim object.</exception>
         private static TelemetrySpan GetOpenTelemetrySpan(ISpan span)
         {
-            var shim = Guard.Type<SpanShim>(span, nameof(span));
+            var shim = Guard.ThrowIfNotOfType<SpanShim>(span);
 
             return shim.Span;
         }
@@ -334,7 +317,7 @@ namespace OpenTelemetry.Shims.OpenTracing
         /// <exception cref="ArgumentException">context is not a valid SpanContextShim object.</exception>
         private static SpanContext GetOpenTelemetrySpanContext(ISpanContext spanContext)
         {
-            var shim = Guard.Type<SpanContextShim>(spanContext, nameof(spanContext));
+            var shim = Guard.ThrowIfNotOfType<SpanContextShim>(spanContext);
 
             return shim.SpanContext;
         }

@@ -34,7 +34,87 @@ namespace OpenTelemetry.Trace.Tests
             Activity.DefaultIdFormat = ActivityIdFormat.W3C;
         }
 
-        [Fact(Skip = "Get around GitHub failure")]
+        [Fact]
+        public void TracerProviderSdkAddSource()
+        {
+            using var source1 = new ActivitySource($"{Utils.GetCurrentMethodName()}.1");
+            using var source2 = new ActivitySource($"{Utils.GetCurrentMethodName()}.2");
+
+            using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+                .AddSource(source1.Name)
+                .Build();
+
+            using (var activity = source1.StartActivity("test"))
+            {
+                Assert.NotNull(activity);
+            }
+
+            using (var activity = source2.StartActivity("test"))
+            {
+                Assert.Null(activity);
+            }
+        }
+
+        [Fact]
+        public void TracerProviderSdkAddSourceWithWildcards()
+        {
+            using var source1 = new ActivitySource($"{Utils.GetCurrentMethodName()}.A");
+            using var source2 = new ActivitySource($"{Utils.GetCurrentMethodName()}.Ab");
+            using var source3 = new ActivitySource($"{Utils.GetCurrentMethodName()}.Abc");
+            using var source4 = new ActivitySource($"{Utils.GetCurrentMethodName()}.B");
+
+            using (var tracerProvider = Sdk.CreateTracerProviderBuilder()
+                .AddSource($"{Utils.GetCurrentMethodName()}.*")
+                .Build())
+            {
+                using (var activity = source1.StartActivity("test"))
+                {
+                    Assert.NotNull(activity);
+                }
+
+                using (var activity = source2.StartActivity("test"))
+                {
+                    Assert.NotNull(activity);
+                }
+
+                using (var activity = source3.StartActivity("test"))
+                {
+                    Assert.NotNull(activity);
+                }
+
+                using (var activity = source4.StartActivity("test"))
+                {
+                    Assert.NotNull(activity);
+                }
+            }
+
+            using (var tracerProvider = Sdk.CreateTracerProviderBuilder()
+                .AddSource($"{Utils.GetCurrentMethodName()}.?")
+                .Build())
+            {
+                using (var activity = source1.StartActivity("test"))
+                {
+                    Assert.NotNull(activity);
+                }
+
+                using (var activity = source2.StartActivity("test"))
+                {
+                    Assert.Null(activity);
+                }
+
+                using (var activity = source3.StartActivity("test"))
+                {
+                    Assert.Null(activity);
+                }
+
+                using (var activity = source4.StartActivity("test"))
+                {
+                    Assert.NotNull(activity);
+                }
+            }
+        }
+
+        [Fact]
         public void TracerProviderSdkInvokesSamplingWithCorrectParameters()
         {
             var testSampler = new TestSampler();
@@ -55,17 +135,19 @@ namespace OpenTelemetry.Trace.Tests
                 // Validate that the TraceId seen by Sampler is same as the
                 // Activity when it got created.
                 Assert.Equal(rootActivity.TraceId, testSampler.LatestSamplingParameters.TraceId);
+                Assert.Null(testSampler.LatestSamplingParameters.Tags);
+                Assert.Null(testSampler.LatestSamplingParameters.Links);
             }
 
             using (var parent = activitySource.StartActivity("parent", ActivityKind.Client))
             {
                 Assert.Equal(parent.TraceId, testSampler.LatestSamplingParameters.TraceId);
-                using (var child = activitySource.StartActivity("child"))
-                {
-                    Assert.Equal(child.TraceId, testSampler.LatestSamplingParameters.TraceId);
-                    Assert.Equal(parent.TraceId, child.TraceId);
-                    Assert.Equal(parent.SpanId, child.ParentSpanId);
-                }
+                using var child = activitySource.StartActivity("child");
+                Assert.Equal(child.TraceId, testSampler.LatestSamplingParameters.TraceId);
+                Assert.Null(testSampler.LatestSamplingParameters.Tags);
+                Assert.Null(testSampler.LatestSamplingParameters.Links);
+                Assert.Equal(parent.TraceId, child.TraceId);
+                Assert.Equal(parent.SpanId, child.ParentSpanId);
             }
 
             var customContext = new ActivityContext(
@@ -77,9 +159,36 @@ namespace OpenTelemetry.Trace.Tests
                 activitySource.StartActivity("customContext", ActivityKind.Client, customContext))
             {
                 Assert.Equal(fromCustomContext.TraceId, testSampler.LatestSamplingParameters.TraceId);
+                Assert.Null(testSampler.LatestSamplingParameters.Tags);
+                Assert.Null(testSampler.LatestSamplingParameters.Links);
                 Assert.Equal(customContext.TraceId, fromCustomContext.TraceId);
                 Assert.Equal(customContext.SpanId, fromCustomContext.ParentSpanId);
                 Assert.NotEqual(customContext.SpanId, fromCustomContext.SpanId);
+            }
+
+            // Validate that Samplers get the tags passed with Activity creation
+            var initialTags = new ActivityTagsCollection();
+            initialTags["tagA"] = "tagAValue";
+            using (var withInitialTags = activitySource.StartActivity("withInitialTags", ActivityKind.Client, default(ActivityContext), initialTags))
+            {
+                Assert.Equal(withInitialTags.TraceId, testSampler.LatestSamplingParameters.TraceId);
+                Assert.Equal(initialTags, testSampler.LatestSamplingParameters.Tags);
+            }
+
+            // Validate that Samplers get the links passed with Activity creation
+            var links = new List<ActivityLink>();
+            var linkContext1 = new ActivityContext(ActivityTraceId.CreateRandom(), ActivitySpanId.CreateRandom(), ActivityTraceFlags.Recorded);
+            var linkContext2 = new ActivityContext(ActivityTraceId.CreateRandom(), ActivitySpanId.CreateRandom(), ActivityTraceFlags.Recorded);
+            var link1 = new ActivityLink(linkContext1);
+            var link2 = new ActivityLink(linkContext2);
+            links.Add(link1);
+            links.Add(link2);
+
+            using (var withInitialTags = activitySource.StartActivity("withLinks", ActivityKind.Client, default(ActivityContext), links: links))
+            {
+                Assert.Equal(withInitialTags.TraceId, testSampler.LatestSamplingParameters.TraceId);
+                Assert.Null(testSampler.LatestSamplingParameters.Tags);
+                Assert.Equal(links, testSampler.LatestSamplingParameters.Links);
             }
 
             // Validate that when StartActivity is called using Parent as string,
@@ -98,14 +207,17 @@ namespace OpenTelemetry.Trace.Tests
                 Assert.Equal(expectedParentSpanId, fromCustomContextAsString.ParentSpanId);
             }
 
-            using (var fromInvalidW3CIdParent =
-                activitySource.StartActivity("customContext", ActivityKind.Client, "InvalidW3CIdParent"))
-            {
-                // OpenTelemetry ActivityContext does not support
-                // non W3C Ids. Starting activity with non W3C Ids
-                // will result in no activity being created.
-                Assert.Null(fromInvalidW3CIdParent);
-            }
+            // Verify that StartActivity returns an instance of Activity.
+            using var fromInvalidW3CIdParent =
+                activitySource.StartActivity("customContext", ActivityKind.Client, "InvalidW3CIdParent");
+            Assert.NotNull(fromInvalidW3CIdParent);
+
+            // Verify that the TestSampler was invoked and received the correct params.
+            Assert.Equal(fromInvalidW3CIdParent.TraceId, testSampler.LatestSamplingParameters.TraceId);
+
+            // OpenTelemetry ActivityContext does not support non W3C Ids.
+            Assert.Null(fromInvalidW3CIdParent.ParentId);
+            Assert.Equal(default, fromInvalidW3CIdParent.ParentSpanId);
         }
 
         [Theory]
@@ -114,12 +226,16 @@ namespace OpenTelemetry.Trace.Tests
         [InlineData(SamplingDecision.RecordAndSample)]
         public void TracerProviderSdkSamplerAttributesAreAppliedToActivity(SamplingDecision sampling)
         {
-            var testSampler = new TestSampler();
-            testSampler.SamplingAction = (samplingParams) =>
+            var testSampler = new TestSampler
             {
-                var attributes = new Dictionary<string, object>();
-                attributes.Add("tagkeybysampler", "tagvalueaddedbysampler");
-                return new SamplingResult(sampling, attributes);
+                SamplingAction = (samplingParams) =>
+                {
+                    var attributes = new Dictionary<string, object>
+                    {
+                        { "tagkeybysampler", "tagvalueaddedbysampler" },
+                    };
+                    return new SamplingResult(sampling, attributes);
+                },
             };
 
             using var activitySource = new ActivitySource(ActivitySourceName);
@@ -128,14 +244,44 @@ namespace OpenTelemetry.Trace.Tests
                 .SetSampler(testSampler)
                 .Build();
 
-            using (var rootActivity = activitySource.StartActivity("root"))
+            using var rootActivity = activitySource.StartActivity("root");
+            Assert.NotNull(rootActivity);
+            Assert.Equal(rootActivity.TraceId, testSampler.LatestSamplingParameters.TraceId);
+            if (sampling != SamplingDecision.Drop)
             {
-                Assert.NotNull(rootActivity);
-                Assert.Equal(rootActivity.TraceId, testSampler.LatestSamplingParameters.TraceId);
-                if (sampling != SamplingDecision.Drop)
-                {
-                    Assert.Contains(new KeyValuePair<string, object>("tagkeybysampler", "tagvalueaddedbysampler"), rootActivity.TagObjects);
-                }
+                Assert.Contains(new KeyValuePair<string, object>("tagkeybysampler", "tagvalueaddedbysampler"), rootActivity.TagObjects);
+            }
+        }
+
+        [Fact]
+        public void TracerSdkSetsActivitySamplingResultAsPropagationWhenParentIsRemote()
+        {
+            var testSampler = new TestSampler();
+            using var activitySource = new ActivitySource(ActivitySourceName);
+            using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+                    .AddSource(ActivitySourceName)
+                    .SetSampler(testSampler)
+                    .Build();
+
+            testSampler.SamplingAction = (samplingParameters) =>
+            {
+                return new SamplingResult(SamplingDecision.Drop);
+            };
+
+            ActivityContext ctx = new ActivityContext(ActivityTraceId.CreateRandom(), ActivitySpanId.CreateRandom(), ActivityTraceFlags.None, isRemote: true);
+
+            using (var activity = activitySource.StartActivity("root", ActivityKind.Server, ctx))
+            {
+                // Even if sampling returns false, for activities with remote parent,
+                // activity is still created with PropagationOnly.
+                Assert.NotNull(activity);
+                Assert.False(activity.IsAllDataRequested);
+                Assert.False(activity.Recorded);
+
+                // This is not a root activity and parent is not remote.
+                // If sampling returns false, no activity is created at all.
+                using var innerActivity = activitySource.StartActivity("inner");
+                Assert.Null(innerActivity);
             }
         }
 
@@ -188,12 +334,10 @@ namespace OpenTelemetry.Trace.Tests
                 Assert.False(activity.IsAllDataRequested);
                 Assert.False(activity.Recorded);
 
-                using (var innerActivity = activitySource.StartActivity("inner"))
-                {
-                    // This is not a root activity.
-                    // If sampling returns false, no activity is created at all.
-                    Assert.Null(innerActivity);
-                }
+                // This is not a root activity.
+                // If sampling returns false, no activity is created at all.
+                using var innerActivity = activitySource.StartActivity("inner");
+                Assert.Null(innerActivity);
             }
         }
 
@@ -209,10 +353,8 @@ namespace OpenTelemetry.Trace.Tests
                     .SetSampler(testSampler)
                     .Build();
 
-            using (var activity = activitySource.StartActivity("root"))
-            {
-                Assert.Null(activity);
-            }
+            using var activity = activitySource.StartActivity("root");
+            Assert.Null(activity);
         }
 
         [Fact]
@@ -308,7 +450,7 @@ namespace OpenTelemetry.Trace.Tests
                 (a) =>
                 {
                     Assert.False(Sdk.SuppressInstrumentation);
-                    Assert.True(a.IsAllDataRequested); // If Proccessor.OnStart is called, activity's IsAllDataRequested is set to true
+                    Assert.True(a.IsAllDataRequested); // If Processor.OnStart is called, activity's IsAllDataRequested is set to true
                     startCalled = true;
                 };
 
@@ -365,7 +507,7 @@ namespace OpenTelemetry.Trace.Tests
                 {
                     Assert.True(samplerCalled);
                     Assert.False(Sdk.SuppressInstrumentation);
-                    Assert.True(a.IsAllDataRequested); // If Proccessor.OnStart is called, activity's IsAllDataRequested is set to true
+                    Assert.True(a.IsAllDataRequested); // If Processor.OnStart is called, activity's IsAllDataRequested is set to true
                     startCalled = true;
                 };
 
@@ -426,7 +568,7 @@ namespace OpenTelemetry.Trace.Tests
                 {
                     Assert.True(samplerCalled);
                     Assert.False(Sdk.SuppressInstrumentation);
-                    Assert.True(a.IsAllDataRequested); // If Proccessor.OnStart is called, activity's IsAllDataRequested is set to true
+                    Assert.True(a.IsAllDataRequested); // If Processor.OnStart is called, activity's IsAllDataRequested is set to true
                     startCalled = true;
                 };
 
@@ -475,7 +617,7 @@ namespace OpenTelemetry.Trace.Tests
                 (a) =>
                 {
                     Assert.False(Sdk.SuppressInstrumentation);
-                    Assert.True(a.IsAllDataRequested); // If Proccessor.OnStart is called, activity's IsAllDataRequested is set to true
+                    Assert.True(a.IsAllDataRequested); // If Processor.OnStart is called, activity's IsAllDataRequested is set to true
                     startCalled = true;
                 };
 
@@ -491,7 +633,7 @@ namespace OpenTelemetry.Trace.Tests
             Assert.False(emptyActivitySource.HasListeners()); // No ActivityListener for empty ActivitySource added yet
 
             var operationNameForLegacyActivity = "TestOperationName";
-            var activitySourceForLegacyActvity = new ActivitySource("TestActivitySource", "1.0.0");
+            var activitySourceForLegacyActivity = new ActivitySource("TestActivitySource", "1.0.0");
 
             // AddLegacyOperationName chained to TracerProviderBuilder
             using var tracerProvider = Sdk.CreateTracerProviderBuilder()
@@ -503,7 +645,7 @@ namespace OpenTelemetry.Trace.Tests
 
             Activity activity = new Activity(operationNameForLegacyActivity);
             activity.Start();
-            ActivityInstrumentationHelper.SetActivitySourceProperty(activity, activitySourceForLegacyActvity);
+            ActivityInstrumentationHelper.SetActivitySourceProperty(activity, activitySourceForLegacyActivity);
             activity.Stop();
 
             Assert.True(startCalled); // Processor.OnStart is called since we provided the legacy OperationName
@@ -524,7 +666,7 @@ namespace OpenTelemetry.Trace.Tests
                 (a) =>
                 {
                     Assert.False(Sdk.SuppressInstrumentation);
-                    Assert.True(a.IsAllDataRequested); // If Proccessor.OnStart is called, activity's IsAllDataRequested is set to true
+                    Assert.True(a.IsAllDataRequested); // If Processor.OnStart is called, activity's IsAllDataRequested is set to true
                     startCalled = true;
                 };
 
@@ -540,11 +682,11 @@ namespace OpenTelemetry.Trace.Tests
             Assert.False(emptyActivitySource.HasListeners()); // No ActivityListener for empty ActivitySource added yet
 
             var operationNameForLegacyActivity = "TestOperationName";
-            var activitySourceForLegacyActvity = new ActivitySource("TestActivitySource", "1.0.0");
+            var activitySourceForLegacyActivity = new ActivitySource("TestActivitySource", "1.0.0");
 
             // AddLegacyOperationName chained to TracerProviderBuilder
             using var tracerProvider = Sdk.CreateTracerProviderBuilder()
-                        .AddSource(activitySourceForLegacyActvity.Name) // Add the updated ActivitySource as a Source
+                        .AddSource(activitySourceForLegacyActivity.Name) // Add the updated ActivitySource as a Source
                         .AddLegacySource(operationNameForLegacyActivity)
                         .AddProcessor(testActivityProcessor)
                         .Build();
@@ -553,7 +695,7 @@ namespace OpenTelemetry.Trace.Tests
 
             Activity activity = new Activity(operationNameForLegacyActivity);
             activity.Start();
-            ActivityInstrumentationHelper.SetActivitySourceProperty(activity, activitySourceForLegacyActvity);
+            ActivityInstrumentationHelper.SetActivitySourceProperty(activity, activitySourceForLegacyActivity);
             activity.Stop();
 
             Assert.True(startCalled); // Processor.OnStart is called since we provided the legacy OperationName
@@ -573,7 +715,7 @@ namespace OpenTelemetry.Trace.Tests
                 (a) =>
                 {
                     Assert.False(Sdk.SuppressInstrumentation);
-                    Assert.True(a.IsAllDataRequested); // If Proccessor.OnStart is called, activity's IsAllDataRequested is set to true
+                    Assert.True(a.IsAllDataRequested); // If Processor.OnStart is called, activity's IsAllDataRequested is set to true
                     startCalled = true;
                 };
 
@@ -589,9 +731,11 @@ namespace OpenTelemetry.Trace.Tests
 
             // AddLegacyOperationName chained to TracerProviderBuilder
             using var tracerProvider = Sdk.CreateTracerProviderBuilder()
-                        .AddProcessor(testActivityProcessor)
-                        .AddLegacySource(operationNameForLegacyActivity)
-                        .Build();
+                .AddProcessor(testActivityProcessor)
+                .AddLegacySource(operationNameForLegacyActivity)
+                .Build();
+
+            Assert.Equal(tracerProvider, testActivityProcessor.ParentProvider);
 
             Activity activity = new Activity(operationNameForLegacyActivity);
             activity.Start();
@@ -611,7 +755,7 @@ namespace OpenTelemetry.Trace.Tests
                 (a) =>
                 {
                     Assert.False(Sdk.SuppressInstrumentation);
-                    Assert.True(a.IsAllDataRequested); // If Proccessor.OnStart is called, activity's IsAllDataRequested is set to true
+                    Assert.True(a.IsAllDataRequested); // If Processor.OnStart is called, activity's IsAllDataRequested is set to true
                     startCalledNew = true;
                 };
 
@@ -624,6 +768,12 @@ namespace OpenTelemetry.Trace.Tests
                 };
 
             tracerProvider.AddProcessor(testActivityProcessorNew);
+
+            var sdkProvider = (TracerProviderSdk)tracerProvider;
+
+            Assert.True(sdkProvider.Processor is CompositeProcessor<Activity>);
+            Assert.Equal(tracerProvider, sdkProvider.Processor.ParentProvider);
+            Assert.Equal(tracerProvider, testActivityProcessorNew.ParentProvider);
 
             Activity activityNew = new Activity(operationNameForLegacyActivity); // Create a new Activity with the same operation name
             activityNew.Start();
@@ -862,9 +1012,11 @@ namespace OpenTelemetry.Trace.Tests
         {
             // Create some parent activity.
             string tracestate = "a=b;c=d";
-            var activityLocalParent = new Activity("TestParent");
-            activityLocalParent.ActivityTraceFlags = traceFlags;
-            activityLocalParent.TraceStateString = tracestate;
+            var activityLocalParent = new Activity("TestParent")
+            {
+                ActivityTraceFlags = traceFlags,
+                TraceStateString = tracestate,
+            };
             activityLocalParent.Start();
 
             var operationNameForLegacyActivity = "TestOperationName";
@@ -917,12 +1069,11 @@ namespace OpenTelemetry.Trace.Tests
         {
             var tracerProvider = Sdk.CreateTracerProviderBuilder().Build();
             var resource = tracerProvider.GetResource();
-            var attributes = resource.Attributes;
 
             Assert.NotNull(resource);
             Assert.NotEqual(Resource.Empty, resource);
             Assert.Single(resource.Attributes);
-            Assert.Equal(resource.Attributes.FirstOrDefault().Key, ResourceSemanticConventions.AttributeServiceName);
+            Assert.Equal(ResourceSemanticConventions.AttributeServiceName, resource.Attributes.FirstOrDefault().Key);
             Assert.Contains("unknown_service", (string)resource.Attributes.FirstOrDefault().Value);
         }
 
@@ -948,11 +1099,15 @@ namespace OpenTelemetry.Trace.Tests
             Assert.True(emptyActivitySource.HasListeners());
         }
 
-        [Fact]
-        public void TracerProviderSdkBuildsWithSDKResource()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void TracerProviderSdkBuildsWithSDKResource(bool useConfigure)
         {
-            var tracerProvider = Sdk.CreateTracerProviderBuilder().SetResourceBuilder(
-                ResourceBuilder.CreateDefault().AddTelemetrySdk()).Build();
+            var tracerProvider = useConfigure ?
+                Sdk.CreateTracerProviderBuilder().SetResourceBuilder(
+                    ResourceBuilder.CreateDefault().AddTelemetrySdk()).Build() :
+                Sdk.CreateTracerProviderBuilder().ConfigureResource(r => r.AddTelemetrySdk()).Build();
             var resource = tracerProvider.GetResource();
             var attributes = resource.Attributes;
 
@@ -1002,7 +1157,7 @@ namespace OpenTelemetry.Trace.Tests
                 {
                     Assert.Contains(a.OperationName, sampledActivities);
                     Assert.False(Sdk.SuppressInstrumentation);
-                    Assert.True(a.IsAllDataRequested); // If Proccessor.OnStart is called, activity's IsAllDataRequested is set to true
+                    Assert.True(a.IsAllDataRequested); // If Processor.OnStart is called, activity's IsAllDataRequested is set to true
                     onStartProcessedActivities.Add(a.OperationName);
                 };
 

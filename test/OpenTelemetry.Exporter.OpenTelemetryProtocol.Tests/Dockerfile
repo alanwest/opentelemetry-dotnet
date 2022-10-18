@@ -2,10 +2,10 @@
 # This should be run from the root of the repo:
 # docker build --file test/OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests/Dockerfile
 
-ARG SDK_VERSION=6.0
-FROM mcr.microsoft.com/dotnet/sdk:6.0-focal AS build
+ARG SDK_VERSION=7.0
+FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION} AS build
 ARG PUBLISH_CONFIGURATION=Release
-ARG PUBLISH_FRAMEWORK=net6.0
+ARG PUBLISH_FRAMEWORK=net7.0
 WORKDIR /repo
 COPY . ./
 WORKDIR "/repo/test/OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests"
@@ -14,4 +14,4 @@ RUN dotnet publish "OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests.csproj" -
 FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION} AS final
 WORKDIR /test
 COPY --from=build /drop .
-ENTRYPOINT ["dotnet", "vstest", "OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests.dll"]
+ENTRYPOINT ["dotnet", "vstest", "OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests.dll", "--logger:console;verbosity=detailed"]

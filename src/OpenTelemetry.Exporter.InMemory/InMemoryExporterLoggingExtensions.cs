@@ -22,12 +22,36 @@ namespace OpenTelemetry.Logs
 {
     public static class InMemoryExporterLoggingExtensions
     {
+        /// <summary>
+        /// Adds InMemory exporter to the OpenTelemetryLoggerOptions.
+        /// </summary>
+        /// <param name="loggerOptions"><see cref="OpenTelemetryLoggerOptions"/> options to use.</param>
+        /// <param name="exportedItems">Collection which will be populated with the exported <see cref="LogRecord"/>.</param>
+        /// <returns>The instance of <see cref="OpenTelemetryLoggerOptions"/> to chain the calls.</returns>
         public static OpenTelemetryLoggerOptions AddInMemoryExporter(this OpenTelemetryLoggerOptions loggerOptions, ICollection<LogRecord> exportedItems)
         {
-            Guard.Null(loggerOptions, nameof(loggerOptions));
-            Guard.Null(exportedItems, nameof(exportedItems));
+            Guard.ThrowIfNull(loggerOptions);
+            Guard.ThrowIfNull(exportedItems);
 
-            return loggerOptions.AddProcessor(new SimpleLogRecordExportProcessor(new InMemoryExporter<LogRecord>(exportedItems)));
+            var logExporter = new InMemoryExporter<LogRecord>(
+                exportFunc: (in Batch<LogRecord> batch) => ExportLogRecord(in batch, exportedItems));
+
+            return loggerOptions.AddProcessor(new SimpleLogRecordExportProcessor(logExporter));
+        }
+
+        private static ExportResult ExportLogRecord(in Batch<LogRecord> batch, ICollection<LogRecord> exportedItems)
+        {
+            if (exportedItems == null)
+            {
+                return ExportResult.Failure;
+            }
+
+            foreach (var log in batch)
+            {
+                exportedItems.Add(log.Copy());
+            }
+
+            return ExportResult.Success;
         }
     }
 }

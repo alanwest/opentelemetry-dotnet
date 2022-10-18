@@ -56,8 +56,18 @@ namespace OpenTelemetry.Internal
                 string _ when UnsetStatusCodeTagValue.Equals(statusCodeTagValue, StringComparison.OrdinalIgnoreCase) => StatusCode.Unset,
                 string _ when ErrorStatusCodeTagValue.Equals(statusCodeTagValue, StringComparison.OrdinalIgnoreCase) => StatusCode.Error,
                 string _ when OkStatusCodeTagValue.Equals(statusCodeTagValue, StringComparison.OrdinalIgnoreCase) => StatusCode.Ok,
-                _ => (StatusCode?)null,
+                _ => null,
             };
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool TryGetStatusCodeForTagValue(string statusCodeTagValue, out StatusCode statusCode)
+        {
+            StatusCode? tempStatusCode = GetStatusCodeForTagValue(statusCodeTagValue);
+
+            statusCode = tempStatusCode ?? default;
+
+            return tempStatusCode.HasValue;
         }
     }
 }

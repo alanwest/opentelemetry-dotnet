@@ -31,6 +31,17 @@ using OpenTelemetry.Metrics;
 using var meterProvider = Sdk.CreateMeterProviderBuilder().Build();
 ```
 
+In a typical application, a single `MeterProvider` is created at application
+startup and disposed at application shutdown. It is important to ensure that the
+provider is not disposed too early. Actual mechanism depends on the application
+type. For example, in a typical ASP.NET application, `MeterProvider` is created
+in `Application_Start`, and disposed in `Application_End` (both methods are a
+part of the Global.asax.cs file) as shown
+[here](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/main/examples/AspNet/Global.asax.cs).
+In a typical ASP.NET Core application, `MeterProvider` lifetime is managed by
+leveraging the built-in Dependency Injection container as shown
+[here](../../../examples/AspNetCore/Program.cs).
+
 ## MeterProvider configuration
 
 `MeterProvider` holds the metrics configuration, which includes the following:
@@ -224,14 +235,12 @@ with the metric are of interest to you.
 #### Specify custom boundaries for Histogram
 
 By default, the boundaries used for a Histogram are [`{ 0, 5, 10, 25, 50, 75,
-100, 250, 500,
-1000}`](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/sdk.md#explicit-bucket-histogram-aggregation).
+100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000}`](https://github.com/open-telemetry/opentelemetry-specification/blob/v1.14.0/specification/metrics/sdk.md#explicit-bucket-histogram-aggregation).
 Views can be used to provide custom boundaries for a Histogram. The measurements
 are then aggregated using the custom boundaries provided instead of the the
 default boundaries. This requires the use of
 `ExplicitBucketHistogramConfiguration`.
 
-<!-- markdownlint-disable MD013 -->
 ```csharp
     // Change Histogram boundaries to count measurements under the following buckets:
     // (-inf, 10]
@@ -248,7 +257,6 @@ default boundaries. This requires the use of
         instrumentName: "MyHistogram",
         new ExplicitBucketHistogramConfiguration { Boundaries = new double[] { } })
 ```
-<!-- markdownlint-enable MD013 -->
 
 ```csharp
     // Advanced selection criteria and config via Func<Instrument, MetricStreamConfiguration>
@@ -287,7 +295,7 @@ allowed to be `1`. This means that the SDK would export measurements from only
 one `MetricStream`. The very first instrument that is published
 (`MyFruitCounter` in this case) will create a `MetricStream` and the SDK will
 thereby reach the maximum `MetricStream` limit of `1`. The measurements from any
-susequent instruments added will be dropped.
+subsequent instruments added will be dropped.
 
 ```csharp
 using System.Diagnostics.Metrics;
@@ -333,7 +341,6 @@ There are two total `MetricStream`s created one for each of these instruments.
 SDK will limit the maximum number of distinct key/value combinations for each of
 these `MetricStream`s to `3`.
 
-<!-- markdownlint-disable MD013 -->
 ```csharp
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
@@ -387,7 +394,6 @@ AnotherFruitCounter.Add(2, new("name", "banana"), new("color", "green")); // Not
 AnotherFruitCounter.Add(5, new("name", "banana"), new("color", "yellow")); // Exported
 AnotherFruitCounter.Add(4, new("name", "mango"), new("color", "yellow")); // Not exported
 ```
-<!-- markdownlint-enable MD013 -->
 
 **NOTE:** The above limit is *per* metric stream, and applies to all the metric
 streams. There is no ability to apply different limits for each instrument at
@@ -416,7 +422,8 @@ Refer to the individual exporter docs to learn how to use them:
 * [In-memory](../../../src/OpenTelemetry.Exporter.InMemory/README.md)
 * [OTLP](../../../src/OpenTelemetry.Exporter.OpenTelemetryProtocol/README.md)
   (OpenTelemetry Protocol)
-* [Prometheus](../../../src/OpenTelemetry.Exporter.Prometheus/README.md)
+* [Prometheus HttpListener](../../../src/OpenTelemetry.Exporter.Prometheus.HttpListener/README.md)
+* [Prometheus AspNetCore](../../../src/OpenTelemetry.Exporter.Prometheus.AspNetCore/README.md)
 
 ### Resource
 

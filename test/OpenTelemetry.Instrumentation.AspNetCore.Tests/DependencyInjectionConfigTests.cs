@@ -17,43 +17,36 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Trace;
-#if NETCOREAPP3_1
-using TestApp.AspNetCore._3._1;
-#endif
-#if NET5_0
-using TestApp.AspNetCore._5._0;
-#endif
-#if NET6_0
-using TestApp.AspNetCore._6._0;
-#endif
 using Xunit;
 
 namespace OpenTelemetry.Instrumentation.AspNetCore.Tests
 {
     public class DependencyInjectionConfigTests
-        : IClassFixture<WebApplicationFactory<Startup>>
+        : IClassFixture<WebApplicationFactory<Program>>
     {
-        private readonly WebApplicationFactory<Startup> factory;
+        private readonly WebApplicationFactory<Program> factory;
 
-        public DependencyInjectionConfigTests(WebApplicationFactory<Startup> factory)
+        public DependencyInjectionConfigTests(WebApplicationFactory<Program> factory)
         {
             this.factory = factory;
         }
 
-        [Fact]
-        public void TestDIConfig()
+        [Theory]
+        [InlineData(null)]
+        [InlineData("CustomName")]
+        public void TestDIConfig(string name)
         {
+            name ??= Options.DefaultName;
+
             bool optionsPickedFromDI = false;
             void ConfigureTestServices(IServiceCollection services)
             {
                 services.AddOpenTelemetryTracing(
-                    builder =>
-                     {
-                         builder.AddAspNetCoreInstrumentation();
-                     });
+                    builder => builder.AddAspNetCoreInstrumentation(name, configureAspNetCoreInstrumentationOptions: null));
 
-                services.Configure<AspNetCoreInstrumentationOptions>(options =>
+                services.Configure<AspNetCoreInstrumentationOptions>(name, options =>
                 {
                     optionsPickedFromDI = true;
                 });

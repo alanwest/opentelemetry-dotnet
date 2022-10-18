@@ -48,7 +48,7 @@ namespace OpenTelemetry.Instrumentation.SqlClient
          *  np:\\serverName\pipe\MSSQL$instanceName\pipeName - in this case a separate regex (see NamedPipeRegex below)
          *  is used to extract instanceName
          */
-        private static readonly Regex DataSourceRegex = new Regex("^(.*\\s*:\\s*\\\\{0,2})?(.*?)\\s*(?:[\\\\,]|$)\\s*(.*?)\\s*(?:,|$)\\s*(.*)$", RegexOptions.Compiled);
+        private static readonly Regex DataSourceRegex = new("^(.*\\s*:\\s*\\\\{0,2})?(.*?)\\s*(?:[\\\\,]|$)\\s*(.*?)\\s*(?:,|$)\\s*(.*)$", RegexOptions.Compiled);
 
         /// <summary>
         /// In a Data Source string like "np:\\serverName\pipe\MSSQL$instanceName\pipeName" match the
@@ -57,9 +57,9 @@ namespace OpenTelemetry.Instrumentation.SqlClient
         /// <see>
         /// <a href="https://docs.microsoft.com/previous-versions/sql/sql-server-2016/ms189307(v=sql.130)"/>
         /// </see>
-        private static readonly Regex NamedPipeRegex = new Regex("pipe\\\\MSSQL\\$(.*?)\\\\", RegexOptions.Compiled);
+        private static readonly Regex NamedPipeRegex = new("pipe\\\\MSSQL\\$(.*?)\\\\", RegexOptions.Compiled);
 
-        private static readonly ConcurrentDictionary<string, SqlConnectionDetails> ConnectionDetailCache = new ConcurrentDictionary<string, SqlConnectionDetails>(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, SqlConnectionDetails> ConnectionDetailCache = new(StringComparer.OrdinalIgnoreCase);
 
         // .NET Framework implementation uses SqlEventSource from which we can't reliably distinguish
         // StoredProcedures from regular Text sql commands.
@@ -130,6 +130,18 @@ namespace OpenTelemetry.Instrumentation.SqlClient
         public Action<Activity, string, object> Enrich { get; set; }
 
 #if !NETFRAMEWORK
+        /// <summary>
+        /// Gets or sets a Filter function that determines whether or not to collect telemetry about a command
+        /// The Filter gets the SqlCommand, and should return a boolean.
+        /// If Filter returns true, the request is collected.
+        /// If Filter returns false or throw exception, the request is filtered out.
+        /// </summary>
+        /// <remarks>
+        /// <para>object: the raw <c>SqlCommand</c> object to interrogate for a decision on whether to trace or not.</para>
+        /// </remarks>
+        /// <returns>true to collect request, false to filter out.</returns>
+        public Func<object, bool> Filter { get; set; }
+
         /// <summary>
         /// Gets or sets a value indicating whether the exception will be recorded as ActivityEvent or not. Default value: False.
         /// </summary>

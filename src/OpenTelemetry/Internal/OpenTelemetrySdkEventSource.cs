@@ -31,9 +31,9 @@ namespace OpenTelemetry.Internal
     [EventSource(Name = "OpenTelemetry-Sdk")]
     internal class OpenTelemetrySdkEventSource : EventSource
     {
-        public static OpenTelemetrySdkEventSource Log = new OpenTelemetrySdkEventSource();
+        public static OpenTelemetrySdkEventSource Log = new();
 #if DEBUG
-        public static OpenTelemetryEventListener Listener = new OpenTelemetryEventListener();
+        public static OpenTelemetryEventListener Listener = new();
 #endif
 
         [NonEvent]
@@ -195,7 +195,7 @@ namespace OpenTelemetry.Internal
         [Event(3, Message = "Exporter returned error '{0}'.", Level = EventLevel.Warning)]
         public void ExporterErrorResult(ExportResult exportResult)
         {
-            this.WriteEvent(3, exportResult.ToString());
+            this.WriteEvent(3, exportResult);
         }
 
         [Event(4, Message = "Unknown error in SpanProcessor event '{0}': '{1}'.", Level = EventLevel.Error)]
@@ -330,7 +330,7 @@ namespace OpenTelemetry.Internal
             this.WriteEvent(32, exportProcessorName, exporterName, droppedCount);
         }
 
-        [Event(33, Message = "Measurements from Instrument '{0}', Meter '{1}' will be ignored. Reason: '{1}'. Suggested action: '{2}'", Level = EventLevel.Warning)]
+        [Event(33, Message = "Measurements from Instrument '{0}', Meter '{1}' will be ignored. Reason: '{2}'. Suggested action: '{3}'", Level = EventLevel.Warning)]
         public void MetricInstrumentIgnored(string instrumentName, string meterName, string reason, string fix)
         {
             this.WriteEvent(33, instrumentName, meterName, reason, fix);
@@ -354,10 +354,70 @@ namespace OpenTelemetry.Internal
             this.WriteEvent(36, instrumentName, reason, fix);
         }
 
+        [Event(37, Message = "'{0}' Disposed.", Level = EventLevel.Informational)]
+        public void ProviderDisposed(string providerName)
+        {
+            this.WriteEvent(37, providerName);
+        }
+
+        [Event(38, Message = "Duplicate Instrument '{0}', Meter '{1}' encountered. Reason: '{2}'. Suggested action: '{3}'", Level = EventLevel.Warning)]
+        public void DuplicateMetricInstrument(string instrumentName, string meterName, string reason, string fix)
+        {
+            this.WriteEvent(38, instrumentName, meterName, reason, fix);
+        }
+
+        [Event(39, Message = "MeterProviderSdk event: '{0}'", Level = EventLevel.Verbose)]
+        public void MeterProviderSdkEvent(string message)
+        {
+            this.WriteEvent(39, message);
+        }
+
+        [Event(40, Message = "MetricReader event: '{0}'", Level = EventLevel.Verbose)]
+        public void MetricReaderEvent(string message)
+        {
+            this.WriteEvent(40, message);
+        }
+
+        [Event(41, Message = "View Configuration ignored for Instrument '{0}', Meter '{1}'. Reason: '{2}'. Measurements from the instrument will use default configuration for Aggregation. Suggested action: '{3}'", Level = EventLevel.Warning)]
+        public void MetricViewIgnored(string instrumentName, string meterName, string reason, string fix)
+        {
+            this.WriteEvent(41, instrumentName, meterName, reason, fix);
+        }
+
+        [Event(42, Message = "Unsupported attribute type '{0}' for '{1}'. Attribute will not be exported.", Level = EventLevel.Warning)]
+        public void UnsupportedAttributeType(string type, string key)
+        {
+            this.WriteEvent(42, type.ToString(), key);
+        }
+
+        [Event(43, Message = "ForceFlush invoked for processor type '{0}' returned result '{1}'.", Level = EventLevel.Verbose)]
+        public void ProcessorForceFlushInvoked(string processorType, bool result)
+        {
+            this.WriteEvent(43, processorType, result);
+        }
+
+        [Event(44, Message = "OpenTelemetryLoggerProvider event: '{0}'", Level = EventLevel.Verbose)]
+        public void OpenTelemetryLoggerProviderEvent(string message)
+        {
+            this.WriteEvent(44, message);
+        }
+
+        [Event(45, Message = "ForceFlush invoked for OpenTelemetryLoggerProvider with timeoutMilliseconds = '{0}'.", Level = EventLevel.Verbose)]
+        public void OpenTelemetryLoggerProviderForceFlushInvoked(int timeoutMilliseconds)
+        {
+            this.WriteEvent(45, timeoutMilliseconds);
+        }
+
+        [Event(46, Message = "TracerProviderSdk event: '{0}'", Level = EventLevel.Verbose)]
+        public void TracerProviderSdkEvent(string message)
+        {
+            this.WriteEvent(46, message);
+        }
+
 #if DEBUG
         public class OpenTelemetryEventListener : EventListener
         {
-            private readonly List<EventSource> eventSources = new List<EventSource>();
+            private readonly List<EventSource> eventSources = new();
 
             public override void Dispose()
             {
@@ -367,6 +427,7 @@ namespace OpenTelemetry.Internal
                 }
 
                 base.Dispose();
+                GC.SuppressFinalize(this);
             }
 
             protected override void OnEventSourceCreated(EventSource eventSource)

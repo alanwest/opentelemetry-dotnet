@@ -14,6 +14,8 @@
 // limitations under the License.
 // </copyright>
 
+#nullable enable
+
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -24,14 +26,41 @@ using OpenTelemetry.Logs;
 
 namespace Microsoft.Extensions.Logging
 {
+    /// <summary>
+    /// Contains extension methods for registering <see cref="OpenTelemetryLoggerProvider"/> into a <see cref="ILoggingBuilder"/> instance.
+    /// </summary>
     public static class OpenTelemetryLoggingExtensions
     {
-        public static ILoggingBuilder AddOpenTelemetry(this ILoggingBuilder builder, Action<OpenTelemetryLoggerOptions> configure = null)
+        /// <summary>
+        /// Adds an OpenTelemetry logger named 'OpenTelemetry' to the <see cref="ILoggerFactory"/>.
+        /// </summary>
+        /// <remarks>
+        /// Note: This is safe to be called multiple times and by library
+        /// authors. Only a single <see cref="OpenTelemetryLoggerProvider"/>
+        /// will be created for a given <see cref="IServiceCollection"/>.
+        /// </remarks>
+        /// <param name="builder">The <see cref="ILoggingBuilder"/> to use.</param>
+        /// <returns>The supplied <see cref="ILoggingBuilder"/> for call chaining.</returns>
+        public static ILoggingBuilder AddOpenTelemetry(this ILoggingBuilder builder)
+            => AddOpenTelemetry(builder, configure: null);
+
+        /// <summary>
+        /// Adds an OpenTelemetry logger named 'OpenTelemetry' to the <see cref="ILoggerFactory"/>.
+        /// </summary>
+        /// <remarks><inheritdoc cref="AddOpenTelemetry(ILoggingBuilder)" path="/remarks"/></remarks>
+        /// <param name="builder">The <see cref="ILoggingBuilder"/> to use.</param>
+        /// <param name="configure">Optional configuration action.</param>
+        /// <returns>The supplied <see cref="ILoggingBuilder"/> for call chaining.</returns>
+        public static ILoggingBuilder AddOpenTelemetry(this ILoggingBuilder builder, Action<OpenTelemetryLoggerOptions>? configure)
         {
-            Guard.Null(builder, nameof(builder));
+            Guard.ThrowIfNull(builder);
 
             builder.AddConfiguration();
+
             builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ILoggerProvider, OpenTelemetryLoggerProvider>());
+
+            // Note: This will bind logger options element (eg "Logging:OpenTelemetry") to OpenTelemetryLoggerOptions
+            LoggerProviderOptions.RegisterProviderOptions<OpenTelemetryLoggerOptions, OpenTelemetryLoggerProvider>(builder.Services);
 
             if (configure != null)
             {

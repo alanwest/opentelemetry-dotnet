@@ -14,6 +14,8 @@
 // limitations under the License.
 // </copyright>
 
+#nullable enable
+
 using System;
 using System.Diagnostics;
 using System.Threading;
@@ -25,8 +27,8 @@ namespace OpenTelemetry.Trace
     {
         public static TracerProvider AddProcessor(this TracerProvider provider, BaseProcessor<Activity> processor)
         {
-            Guard.Null(provider, nameof(provider));
-            Guard.Null(processor, nameof(processor));
+            Guard.ThrowIfNull(provider);
+            Guard.ThrowIfNull(processor);
 
             if (provider is TracerProviderSdk tracerProviderSdk)
             {
@@ -56,8 +58,8 @@ namespace OpenTelemetry.Trace
         /// </remarks>
         public static bool ForceFlush(this TracerProvider provider, int timeoutMilliseconds = Timeout.Infinite)
         {
-            Guard.Null(provider, nameof(provider));
-            Guard.InvalidTimeout(timeoutMilliseconds, nameof(timeoutMilliseconds));
+            Guard.ThrowIfNull(provider);
+            Guard.ThrowIfInvalidTimeout(timeoutMilliseconds);
 
             if (provider is TracerProviderSdk tracerProviderSdk)
             {
@@ -96,8 +98,8 @@ namespace OpenTelemetry.Trace
         /// </remarks>
         public static bool Shutdown(this TracerProvider provider, int timeoutMilliseconds = Timeout.Infinite)
         {
-            Guard.Null(provider, nameof(provider));
-            Guard.InvalidTimeout(timeoutMilliseconds, nameof(timeoutMilliseconds));
+            Guard.ThrowIfNull(provider);
+            Guard.ThrowIfInvalidTimeout(timeoutMilliseconds);
 
             if (provider is TracerProviderSdk tracerProviderSdk)
             {

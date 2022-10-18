@@ -25,11 +25,11 @@ using OpenTelemetry;
 using OpenTelemetry.Internal;
 using OpenTelemetry.Tests;
 using OpenTelemetryProtocol::OpenTelemetry.Exporter;
+using OpenTelemetryProtocol::OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation;
 using OpenTelemetryProtocol::OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExportClient;
 
 namespace Benchmarks.Exporter
 {
-    [MemoryDiagnoser]
     public class OtlpHttpExporterBenchmarks
     {
         private readonly byte[] buffer = new byte[1024 * 1024];
@@ -75,6 +75,7 @@ namespace Benchmarks.Exporter
             };
             this.exporter = new OtlpTraceExporter(
                 options,
+                new SdkLimitOptions(),
                 new OtlpHttpTraceExportClient(options, options.HttpClientFactory()));
 
             this.activity = ActivityHelper.CreateTestActivity();

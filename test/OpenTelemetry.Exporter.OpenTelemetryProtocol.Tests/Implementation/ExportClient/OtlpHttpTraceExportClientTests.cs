@@ -20,7 +20,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
-#if !NET5_0_OR_GREATER
+#if !NET6_0_OR_GREATER
 using System.Threading.Tasks;
 #endif
 using Moq;
@@ -30,12 +30,14 @@ using OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExportClient;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Xunit;
-using OtlpCollector = Opentelemetry.Proto.Collector.Trace.V1;
+using OtlpCollector = OpenTelemetry.Proto.Collector.Trace.V1;
 
-namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests.Implementation.ExportClient
+namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests
 {
     public class OtlpHttpTraceExportClientTests
     {
+        private static readonly SdkLimitOptions DefaultSdkLimitOptions = new();
+
         static OtlpHttpTraceExportClientTests()
         {
             Activity.DefaultIdFormat = ActivityIdFormat.W3C;
@@ -98,7 +100,7 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests.Implementation.Expo
             var httpRequestContent = Array.Empty<byte>();
 
             httpHandlerMock.Protected()
-#if NET5_0_OR_GREATER
+#if NET6_0_OR_GREATER
                 .Setup<HttpResponseMessage>("Send", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
                 .Returns((HttpRequestMessage request, CancellationToken token) =>
                 {
@@ -109,7 +111,7 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests.Implementation.Expo
                     httpRequest = r;
 
                     // We have to capture content as it can't be accessed after request is disposed inside of SendExportRequest method
-                    httpRequestContent = r.Content.ReadAsByteArrayAsync()?.Result;
+                    httpRequestContent = r.Content.ReadAsByteArrayAsync(ct)?.Result;
                 })
 #else
                 .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
@@ -171,7 +173,7 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests.Implementation.Expo
             {
                 var request = new OtlpCollector.ExportTraceServiceRequest();
 
-                request.AddBatch(resourceBuilder.Build().ToOtlpResource(), batch);
+                request.AddBatch(DefaultSdkLimitOptions, resourceBuilder.Build().ToOtlpResource(), batch);
 
                 // Act
                 var result = exportClient.SendExportRequest(request);
