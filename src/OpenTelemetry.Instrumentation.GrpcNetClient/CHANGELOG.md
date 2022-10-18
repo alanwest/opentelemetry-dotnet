@@ -2,6 +2,60 @@
 
 ## Unreleased
 
+## 1.0.0-rc9.8
+
+Released 2022-Oct-17
+
+## 1.0.0-rc9.7
+
+Released 2022-Sep-29
+
+* Added overloads which accept a name to the `TracerProviderBuilder`
+  `AddGrpcClientInstrumentation` extension to allow for more fine-grained
+  options management
+  ([#3665](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3665))
+
+## 1.0.0-rc9.6
+
+Released 2022-Aug-18
+
+* Updated to use Activity native support from `System.Diagnostics.DiagnosticSource`
+  to set activity status.
+  ([#3118](https://github.com/open-telemetry/opentelemetry-dotnet/issues/3118))
+  ([#3569](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3569))
+
+## 1.0.0-rc9.5
+
+Released 2022-Aug-02
+
+## 1.0.0-rc9.4
+
+Released 2022-Jun-03
+
+* Add `netstandard2.0` target enabling the Grpc.Net.Client instrumentation to
+  be consumed by .NET Framework applications.
+  ([#3105](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3105))
+
+## 1.0.0-rc9.3
+
+Released 2022-Apr-15
+
+## 1.0.0-rc9.2
+
+Released 2022-Apr-12
+
+## 1.0.0-rc9.1
+
+Released 2022-Mar-30
+
+## 1.0.0-rc10 (broken. use 1.0.0-rc9.1 and newer)
+
+Released 2022-Mar-04
+
+## 1.0.0-rc9
+
+Released 2022-Feb-02
+
 ## 1.0.0-rc8
 
 Released 2021-Oct-08
@@ -70,7 +124,7 @@ Released 2020-Sep-15
 * The `grpc.method` and `grpc.status_code` attributes added by the library are
   removed from the span. The information from these attributes is contained in
   other attributes that follow the conventions of OpenTelemetry.
-  ([#1260](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1260)).
+  ([#1260](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1260))
 
 ## 0.5.0-beta.2
 

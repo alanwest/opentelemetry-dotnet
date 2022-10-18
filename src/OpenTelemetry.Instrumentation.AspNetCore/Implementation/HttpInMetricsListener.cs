@@ -14,20 +14,20 @@
 // limitations under the License.
 // </copyright>
 
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using OpenTelemetry.Trace;
 
 namespace OpenTelemetry.Instrumentation.AspNetCore.Implementation
 {
     internal class HttpInMetricsListener : ListenerHandler
     {
-        private readonly PropertyFetcher<HttpContext> stopContextFetcher = new PropertyFetcher<HttpContext>("HttpContext");
-        private readonly Meter meter;
+        private const string OnStopEvent = "Microsoft.AspNetCore.Hosting.HttpRequestIn.Stop";
 
-        private Histogram<double> httpServerDuration;
+        private readonly Meter meter;
+        private readonly Histogram<double> httpServerDuration;
 
         public HttpInMetricsListener(string name, Meter meter)
             : base(name)
@@ -36,34 +36,68 @@ namespace OpenTelemetry.Instrumentation.AspNetCore.Implementation
             this.httpServerDuration = meter.CreateHistogram<double>("http.server.duration", "ms", "measures the duration of the inbound HTTP request");
         }
 
-        public override void OnStopActivity(Activity activity, object payload)
+        public override void OnEventWritten(string name, object payload)
         {
-            HttpContext context = this.stopContextFetcher.Fetch(payload);
-            if (context == null)
+            if (name == OnStopEvent)
             {
-                AspNetCoreInstrumentationEventSource.Log.NullPayload(nameof(HttpInMetricsListener), nameof(this.OnStopActivity));
-                return;
+                HttpContext context = payload as HttpContext;
+                if (context == null)
+                {
+                    AspNetCoreInstrumentationEventSource.Log.NullPayload(nameof(HttpInMetricsListener), nameof(this.OnEventWritten));
+                    return;
+                }
+
+                // TODO: Prometheus pulls metrics by invoking the /metrics endpoint. Decide if it makes sense to suppress this.
+                // Below is just a temporary way of achieving this suppression for metrics (we should consider suppressing traces too).
+                // If we want to suppress activity from Prometheus then we should use SuppressInstrumentationScope.
+                if (context.Request.Path.HasValue && context.Request.Path.Value.Contains("metrics"))
+                {
+                    return;
+                }
+
+                string host;
+
+                if (context.Request.Host.Port is null or 80 or 443)
+                {
+                    host = context.Request.Host.Host;
+                }
+                else
+                {
+                    host = context.Request.Host.Host + ":" + context.Request.Host.Port;
+                }
+
+                TagList tags;
+
+                var target = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText;
+
+                // TODO: This is just a minimal set of attributes. See the spec for additional attributes:
+                // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/semantic_conventions/http-metrics.md#http-server
+                if (!string.IsNullOrEmpty(target))
+                {
+                    tags = new TagList
+                    {
+                        { SemanticConventions.AttributeHttpFlavor, HttpTagHelper.GetFlavorTagValueFromProtocol(context.Request.Protocol) },
+                        { SemanticConventions.AttributeHttpScheme, context.Request.Scheme },
+                        { SemanticConventions.AttributeHttpMethod, context.Request.Method },
+                        { SemanticConventions.AttributeHttpHost, host },
+                        { SemanticConventions.AttributeHttpTarget, target },
+                        { SemanticConventions.AttributeHttpStatusCode, context.Response.StatusCode.ToString() },
+                    };
+                }
+                else
+                {
+                    tags = new TagList
+                    {
+                        { SemanticConventions.AttributeHttpFlavor, HttpTagHelper.GetFlavorTagValueFromProtocol(context.Request.Protocol) },
+                        { SemanticConventions.AttributeHttpScheme, context.Request.Scheme },
+                        { SemanticConventions.AttributeHttpMethod, context.Request.Method },
+                        { SemanticConventions.AttributeHttpHost, host },
+                        { SemanticConventions.AttributeHttpStatusCode, context.Response.StatusCode.ToString() },
+                    };
+                }
+
+                this.httpServerDuration.Record(Activity.Current.Duration.TotalMilliseconds, tags);
             }
-
-            // TODO: Prometheus pulls metrics by invoking the /metrics endpoint. Decide if it makes sense to suppress this.
-            // Below is just a temporary way of achieving this suppression for metrics (we should consider suppressing traces too).
-            // If we want to suppress activity from Prometheus then we should use SuppressInstrumentationScope.
-            if (context.Request.Path.HasValue && context.Request.Path.Value.Contains("metrics"))
-            {
-                return;
-            }
-
-            // TODO: This is just a minimal set of attributes. See the spec for additional attributes:
-            // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/semantic_conventions/http-metrics.md#http-server
-            var tags = new KeyValuePair<string, object>[]
-            {
-                new KeyValuePair<string, object>(SemanticConventions.AttributeHttpMethod, context.Request.Method),
-                new KeyValuePair<string, object>(SemanticConventions.AttributeHttpScheme, context.Request.Scheme),
-                new KeyValuePair<string, object>(SemanticConventions.AttributeHttpStatusCode, context.Response.StatusCode),
-                new KeyValuePair<string, object>(SemanticConventions.AttributeHttpFlavor, context.Request.Protocol),
-            };
-
-            this.httpServerDuration.Record(activity.Duration.TotalMilliseconds, tags);
         }
     }
 }

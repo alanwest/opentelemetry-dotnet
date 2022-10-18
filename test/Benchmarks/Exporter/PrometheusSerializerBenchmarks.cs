@@ -14,25 +14,22 @@
 // limitations under the License.
 // </copyright>
 
-extern alias Prometheus;
-
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
 using BenchmarkDotNet.Attributes;
 using OpenTelemetry;
+using OpenTelemetry.Exporter.Prometheus;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Tests;
-using Prometheus::OpenTelemetry.Exporter.Prometheus;
 
 namespace Benchmarks.Exporter
 {
-    [MemoryDiagnoser]
     public class PrometheusSerializerBenchmarks
     {
+        private readonly List<Metric> metrics = new();
+        private readonly byte[] buffer = new byte[85000];
         private Meter meter;
         private MeterProvider meterProvider;
-        private List<Metric> metrics = new List<Metric>();
-        private byte[] buffer = new byte[85000];
 
         [Params(1, 1000, 10000)]
         public int NumberOfSerializeCalls { get; set; }

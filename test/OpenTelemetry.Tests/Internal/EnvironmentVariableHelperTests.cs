@@ -31,6 +31,7 @@ namespace OpenTelemetry.Internal.Tests
         public void Dispose()
         {
             Environment.SetEnvironmentVariable(EnvVar, null);
+            GC.SuppressFinalize(this);
         }
 
         [Fact]
@@ -52,6 +53,44 @@ namespace OpenTelemetry.Internal.Tests
 
             Assert.False(actualBool);
             Assert.Null(actualValue);
+        }
+
+        [Theory]
+        [InlineData("true", true)]
+        [InlineData("TRUE", true)]
+        [InlineData("false", false)]
+        [InlineData("FALSE", false)]
+        [InlineData(" true ", true)]
+        [InlineData(" false ", false)]
+        public void LoadBoolean(string value, bool expectedValue)
+        {
+            Environment.SetEnvironmentVariable(EnvVar, value);
+
+            bool actualBool = EnvironmentVariableHelper.LoadBoolean(EnvVar, out bool actualValue);
+
+            Assert.True(actualBool);
+            Assert.Equal(expectedValue, actualValue);
+        }
+
+        [Fact]
+        public void LoadBoolean_NoValue()
+        {
+            bool actualBool = EnvironmentVariableHelper.LoadBoolean(EnvVar, out bool actualValue);
+
+            Assert.False(actualBool);
+            Assert.False(actualValue);
+        }
+
+        [Theory]
+        [InlineData("something")] // non true/false
+        [InlineData(" ")] // whitespaces
+        [InlineData("0")] // 0
+        [InlineData("1")] // 1
+        public void LoadBoolean_Invalid(string value)
+        {
+            Environment.SetEnvironmentVariable(EnvVar, value);
+
+            Assert.Throws<FormatException>(() => EnvironmentVariableHelper.LoadBoolean(EnvVar, out bool _));
         }
 
         [Theory]

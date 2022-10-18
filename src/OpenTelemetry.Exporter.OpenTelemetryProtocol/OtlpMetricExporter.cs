@@ -18,8 +18,8 @@ using System;
 using OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation;
 using OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExportClient;
 using OpenTelemetry.Metrics;
-using OtlpCollector = Opentelemetry.Proto.Collector.Metrics.V1;
-using OtlpResource = Opentelemetry.Proto.Resource.V1;
+using OtlpCollector = OpenTelemetry.Proto.Collector.Metrics.V1;
+using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 
 namespace OpenTelemetry.Exporter
 {
@@ -69,10 +69,10 @@ namespace OpenTelemetry.Exporter
 
             var request = new OtlpCollector.ExportMetricsServiceRequest();
 
-            request.AddMetrics(this.ProcessResource, metrics);
-
             try
             {
+                request.AddMetrics(this.ProcessResource, metrics);
+
                 if (!this.exportClient.SendExportRequest(request))
                 {
                     return ExportResult.Failure;

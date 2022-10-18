@@ -27,14 +27,14 @@ namespace OpenTelemetry.Metrics
     /// </summary>
     internal sealed partial class CompositeMetricReader : MetricReader
     {
-        private readonly DoublyLinkedListNode head;
+        public readonly DoublyLinkedListNode Head;
         private DoublyLinkedListNode tail;
         private bool disposed;
         private int count;
 
         public CompositeMetricReader(IEnumerable<MetricReader> readers)
         {
-            Guard.Null(readers, nameof(readers));
+            Guard.ThrowIfNull(readers);
 
             using var iter = readers.GetEnumerator();
             if (!iter.MoveNext())
@@ -42,8 +42,8 @@ namespace OpenTelemetry.Metrics
                 throw new ArgumentException($"'{iter}' is null or empty", nameof(iter));
             }
 
-            this.head = new DoublyLinkedListNode(iter.Current);
-            this.tail = this.head;
+            this.Head = new DoublyLinkedListNode(iter.Current);
+            this.tail = this.Head;
             this.count++;
 
             while (iter.MoveNext())
@@ -54,7 +54,7 @@ namespace OpenTelemetry.Metrics
 
         public CompositeMetricReader AddReader(MetricReader reader)
         {
-            Guard.Null(reader, nameof(reader));
+            Guard.ThrowIfNull(reader);
 
             var node = new DoublyLinkedListNode(reader)
             {
@@ -67,7 +67,7 @@ namespace OpenTelemetry.Metrics
             return this;
         }
 
-        public Enumerator GetEnumerator() => new Enumerator(this.head);
+        public Enumerator GetEnumerator() => new(this.Head);
 
         /// <inheritdoc/>
         internal override bool ProcessMetrics(in Batch<Metric> metrics, int timeoutMilliseconds)
@@ -85,7 +85,7 @@ namespace OpenTelemetry.Metrics
                 ? null
                 : Stopwatch.StartNew();
 
-            for (var cur = this.head; cur != null; cur = cur.Next)
+            for (var cur = this.Head; cur != null; cur = cur.Next)
             {
                 if (sw == null)
                 {
@@ -111,7 +111,7 @@ namespace OpenTelemetry.Metrics
                 ? null
                 : Stopwatch.StartNew();
 
-            for (var cur = this.head; cur != null; cur = cur.Next)
+            for (var cur = this.Head; cur != null; cur = cur.Next)
             {
                 if (sw == null)
                 {
@@ -135,16 +135,15 @@ namespace OpenTelemetry.Metrics
             {
                 if (disposing)
                 {
-                    for (var cur = this.head; cur != null; cur = cur.Next)
+                    for (var cur = this.Head; cur != null; cur = cur.Next)
                     {
                         try
                         {
                             cur.Value?.Dispose();
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
-                            // TODO: which event source do we use?
-                            // OpenTelemetrySdkEventSource.Log.SpanProcessorException(nameof(this.Dispose), ex);
+                            OpenTelemetrySdkEventSource.Log.MetricReaderException(nameof(this.Dispose), ex);
                         }
                     }
                 }

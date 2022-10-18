@@ -17,16 +17,16 @@
 using System;
 using System.Threading;
 using Grpc.Core;
-using OtlpCollector = Opentelemetry.Proto.Collector.Logs.V1;
+using OtlpCollector = OpenTelemetry.Proto.Collector.Logs.V1;
 
 namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExportClient
 {
-    /// <summary>Class for sending OTLP metrics export request over gRPC.</summary>
+    /// <summary>Class for sending OTLP Logs export request over gRPC.</summary>
     internal sealed class OtlpGrpcLogExportClient : BaseOtlpGrpcExportClient<OtlpCollector.ExportLogsServiceRequest>
     {
-        private readonly OtlpCollector.LogsService.ILogsServiceClient logsClient;
+        private readonly OtlpCollector.LogsService.LogsServiceClient logsClient;
 
-        public OtlpGrpcLogExportClient(OtlpExporterOptions options, OtlpCollector.LogsService.ILogsServiceClient logsServiceClient = null)
+        public OtlpGrpcLogExportClient(OtlpExporterOptions options, OtlpCollector.LogsService.LogsServiceClient logsServiceClient = null)
             : base(options)
         {
             if (logsServiceClient != null)
@@ -43,15 +43,15 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExportClie
         /// <inheritdoc/>
         public override bool SendExportRequest(OtlpCollector.ExportLogsServiceRequest request, CancellationToken cancellationToken = default)
         {
-            var deadline = DateTime.UtcNow.AddMilliseconds(this.Options.TimeoutMilliseconds);
+            var deadline = DateTime.UtcNow.AddMilliseconds(this.TimeoutMilliseconds);
 
             try
             {
-                this.logsClient.Export(request, headers: this.Headers, deadline: deadline);
+                this.logsClient.Export(request, headers: this.Headers, deadline: deadline, cancellationToken: cancellationToken);
             }
             catch (RpcException ex)
             {
-                OpenTelemetryProtocolExporterEventSource.Log.FailedToReachCollector(this.Options.Endpoint, ex);
+                OpenTelemetryProtocolExporterEventSource.Log.FailedToReachCollector(this.Endpoint, ex);
 
                 return false;
             }

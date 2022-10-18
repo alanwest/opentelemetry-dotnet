@@ -18,9 +18,9 @@ dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol
 
 ## Configuration
 
-You can configure the `OtlpExporter` through `OtlpExporterOptions`
-properties and environment variables. The `OtlpExporterOptions`
-setters take precedence over the environment variables.
+You can configure the `OtlpExporter` through `Options` types properties
+and environment variables.
+The `Options` type setters take precedence over the environment variables.
 
 ## Options Properties
 
@@ -56,25 +56,35 @@ The following environment variables can be used to override the default
 values of the `OtlpExporterOptions`
 (following the [OpenTelemetry specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md)).
 
-| Environment variable          | `OtlpExporterOptions` property    |
-| ------------------------------| ----------------------------------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `Endpoint`                        |
-| `OTEL_EXPORTER_OTLP_HEADERS`  | `Headers`                         |
-| `OTEL_EXPORTER_OTLP_TIMEOUT`  | `TimeoutMilliseconds`             |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `Protocol` (grpc or http/protobuf)|
+| Environment variable          | `OtlpExporterOptions` property        |
+| ------------------------------| --------------------------------------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `Endpoint`                            |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | `Headers`                             |
+| `OTEL_EXPORTER_OTLP_TIMEOUT`  | `TimeoutMilliseconds`                 |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `Protocol` (`grpc` or `http/protobuf`)|
+
+The following environment variables can be used to override the default
+values of the `PeriodicExportingMetricReaderOptions`
+(following the [OpenTelemetry specification](https://github.com/open-telemetry/opentelemetry-specification/blob/v1.12.0/specification/sdk-environment-variables.md#periodic-exporting-metricreader).
+
+| Environment variable          | `PeriodicExportingMetricReaderOptions` property |
+| ------------------------------| ------------------------------------------------|
+| `OTEL_METRIC_EXPORT_INTERVAL` | `ExportIntervalMilliseconds`                    |
+| `OTEL_METRIC_EXPORT_TIMEOUT`  | `ExportTimeoutMilliseconds`                     |
 
 `FormatException` is thrown in case of an invalid value for any of the
 supported environment variables.
 
 ## OTLP Logs
 
-This package currently only supports exporting traces and metrics. Once the
-[OTLP log data model](https://github.com/open-telemetry/opentelemetry-proto#maturity-level)
-is deemed stable, the OTLP log exporter will be folded into this package.
-
-In the meantime, support for exporting logs is provided by installing the
+This package currently only supports exporting traces and metrics. Support for
+exporting logs is provided by installing the
 [`OpenTelemetry.Exporter.OpenTelemetryProtocol.Logs`](../OpenTelemetry.Exporter.OpenTelemetryProtocol.Logs/README.md)
 package.
+
+Once the OTLP log exporter is stable, it'll be folded into this package. Check
+[this](https://github.com/open-telemetry/opentelemetry-dotnet/milestone/35)
+milestone for tracking.
 
 ## Special case when using insecure channel
 
@@ -114,7 +124,7 @@ services.AddOpenTelemetryTracing((builder) => builder
 
 For users using
 [IHttpClientFactory](https://docs.microsoft.com/dotnet/architecture/microservices/implement-resilient-applications/use-httpclientfactory-to-implement-resilient-http-requests)
-you may also customize the named "OtlpTraceExporter" or "OtlpMetricExporter"
+you may also customize the named "OtlpTraceExporter" and/or "OtlpMetricExporter"
 `HttpClient` using the built-in `AddHttpClient` extension:
 
 ```csharp
@@ -126,6 +136,15 @@ services.AddHttpClient(
 
 Note: The single instance returned by `HttpClientFactory` is reused by all
 export requests.
+
+## Troubleshooting
+
+This component uses an
+[EventSource](https://docs.microsoft.com/dotnet/api/system.diagnostics.tracing.eventsource)
+with the name "OpenTelemetry-Exporter-OpenTelemetryProtocol" for its internal
+logging. Please refer to [SDK
+troubleshooting](../OpenTelemetry/README.md#troubleshooting) for instructions on
+seeing these internal logs.
 
 ## References
 

@@ -14,7 +14,6 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Globalization;
 using System.Text;
 using OpenTelemetry.Metrics;
@@ -38,11 +37,12 @@ namespace OpenTelemetry.Exporter
                 this.resource = this.ParentProvider.GetResource();
                 if (this.resource != Resource.Empty)
                 {
+                    this.WriteLine("Resource associated with Metric:");
                     foreach (var resourceAttribute in this.resource.Attributes)
                     {
-                        if (resourceAttribute.Key.Equals("service.name"))
+                        if (ConsoleTagTransformer.Instance.TryTransformTag(resourceAttribute, out var result))
                         {
-                            Console.WriteLine("Service.Name" + resourceAttribute.Value);
+                            this.WriteLine($"    {result}");
                         }
                     }
                 }
@@ -52,28 +52,28 @@ namespace OpenTelemetry.Exporter
             {
                 var msg = new StringBuilder($"\nExport ");
                 msg.Append(metric.Name);
-                if (!string.IsNullOrEmpty(metric.Description))
+                if (metric.Description != string.Empty)
                 {
                     msg.Append(", ");
                     msg.Append(metric.Description);
                 }
 
-                if (!string.IsNullOrEmpty(metric.Unit))
+                if (metric.Unit != string.Empty)
                 {
                     msg.Append($", Unit: {metric.Unit}");
                 }
 
-                if (!string.IsNullOrEmpty(metric.Meter.Name))
+                if (!string.IsNullOrEmpty(metric.MeterName))
                 {
-                    msg.Append($", Meter: {metric.Meter.Name}");
+                    msg.Append($", Meter: {metric.MeterName}");
 
-                    if (!string.IsNullOrEmpty(metric.Meter.Version))
+                    if (!string.IsNullOrEmpty(metric.MeterVersion))
                     {
-                        msg.Append($"/{metric.Meter.Version}");
+                        msg.Append($"/{metric.MeterVersion}");
                     }
                 }
 
-                Console.WriteLine(msg.ToString());
+                this.WriteLine(msg.ToString());
 
                 foreach (ref readonly var metricPoint in metric.GetMetricPoints())
                 {
@@ -81,10 +81,11 @@ namespace OpenTelemetry.Exporter
                     StringBuilder tagsBuilder = new StringBuilder();
                     foreach (var tag in metricPoint.Tags)
                     {
-                        tagsBuilder.Append(tag.Key);
-                        tagsBuilder.Append(':');
-                        tagsBuilder.Append(tag.Value);
-                        tagsBuilder.Append(' ');
+                        if (ConsoleTagTransformer.Instance.TryTransformTag(tag, out var result))
+                        {
+                            tagsBuilder.Append(result);
+                            tagsBuilder.Append(' ');
+                        }
                     }
 
                     var tags = tagsBuilder.ToString().TrimEnd();
@@ -174,7 +175,7 @@ namespace OpenTelemetry.Exporter
                     msg.Append(metric.MetricType);
                     msg.AppendLine();
                     msg.Append($"Value: {valueDisplay}");
-                    Console.WriteLine(msg);
+                    this.WriteLine(msg.ToString());
                 }
             }
 

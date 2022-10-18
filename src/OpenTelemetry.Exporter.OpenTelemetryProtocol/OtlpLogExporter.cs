@@ -15,11 +15,12 @@
 // </copyright>
 
 using System;
+using System.Diagnostics;
 using OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation;
 using OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExportClient;
 using OpenTelemetry.Logs;
-using OtlpCollector = Opentelemetry.Proto.Collector.Logs.V1;
-using OtlpResource = Opentelemetry.Proto.Resource.V1;
+using OtlpCollector = OpenTelemetry.Proto.Collector.Logs.V1;
+using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 
 namespace OpenTelemetry.Exporter
 {
@@ -29,6 +30,7 @@ namespace OpenTelemetry.Exporter
     /// </summary>
     internal class OtlpLogExporter : BaseExporter<LogRecord>
     {
+        private readonly SdkLimitOptions sdkLimitOptions;
         private readonly IExportClient<OtlpCollector.ExportLogsServiceRequest> exportClient;
 
         private OtlpResource.Resource processResource;
@@ -38,25 +40,33 @@ namespace OpenTelemetry.Exporter
         /// </summary>
         /// <param name="options">Configuration options for the exporter.</param>
         public OtlpLogExporter(OtlpExporterOptions options)
-            : this(options, null)
+            : this(options, new(), null)
         {
         }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="OtlpLogExporter"/> class.
         /// </summary>
-        /// <param name="options">Configuration options for the exporter.</param>
+        /// <param name="exporterOptions">Configuration options for the exporter.</param>
+        /// <param name="sdkLimitOptions"><see cref="SdkLimitOptions"/>.</param>
         /// <param name="exportClient">Client used for sending export request.</param>
-        internal OtlpLogExporter(OtlpExporterOptions options, IExportClient<OtlpCollector.ExportLogsServiceRequest> exportClient = null)
+        internal OtlpLogExporter(
+            OtlpExporterOptions exporterOptions,
+            SdkLimitOptions sdkLimitOptions,
+            IExportClient<OtlpCollector.ExportLogsServiceRequest> exportClient = null)
         {
+            Debug.Assert(exporterOptions != null, "exporterOptions was null");
+            Debug.Assert(sdkLimitOptions != null, "sdkLimitOptions was null");
+
+            this.sdkLimitOptions = sdkLimitOptions;
+
             if (exportClient != null)
             {
                 this.exportClient = exportClient;
             }
             else
             {
-                // TODO: this instantiation should be aligned with the protocol option (grpc or http/protobuf) when OtlpHttpMetricsExportClient will be implemented.
-                this.exportClient = new OtlpGrpcLogExportClient(options);
+                this.exportClient = exporterOptions.GetLogExportClient();
             }
         }
 
@@ -70,10 +80,10 @@ namespace OpenTelemetry.Exporter
 
             var request = new OtlpCollector.ExportLogsServiceRequest();
 
-            request.AddBatch(this.ProcessResource, logRecordBatch);
-
             try
             {
+                request.AddBatch(this.sdkLimitOptions, this.ProcessResource, logRecordBatch);
+
                 if (!this.exportClient.SendExportRequest(request))
                 {
                     return ExportResult.Failure;

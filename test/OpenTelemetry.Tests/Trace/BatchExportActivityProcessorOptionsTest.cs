@@ -15,6 +15,8 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace OpenTelemetry.Trace.Tests
@@ -23,12 +25,13 @@ namespace OpenTelemetry.Trace.Tests
     {
         public BatchExportActivityProcessorOptionsTest()
         {
-            this.ClearEnvVars();
+            ClearEnvVars();
         }
 
         public void Dispose()
         {
-            this.ClearEnvVars();
+            ClearEnvVars();
+            GC.SuppressFinalize(this);
         }
 
         [Fact]
@@ -55,6 +58,36 @@ namespace OpenTelemetry.Trace.Tests
             Assert.Equal(1, options.ExporterTimeoutMilliseconds);
             Assert.Equal(2, options.MaxExportBatchSize);
             Assert.Equal(3, options.MaxQueueSize);
+            Assert.Equal(4, options.ScheduledDelayMilliseconds);
+        }
+
+        [Fact]
+        public void ExportActivityProcessorOptions_UsingIConfiguration()
+        {
+            var values = new Dictionary<string, string>()
+            {
+                [BatchExportActivityProcessorOptions.MaxQueueSizeEnvVarKey] = "1",
+                [BatchExportActivityProcessorOptions.MaxExportBatchSizeEnvVarKey] = "2",
+                [BatchExportActivityProcessorOptions.ExporterTimeoutEnvVarKey] = "3",
+                [BatchExportActivityProcessorOptions.ScheduledDelayEnvVarKey] = "4",
+            };
+
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(values)
+                .Build();
+
+            var parentOptions = new ExportActivityProcessorOptions(configuration);
+
+            Assert.Equal(1, parentOptions.BatchExportProcessorOptions.MaxQueueSize);
+            Assert.Equal(2, parentOptions.BatchExportProcessorOptions.MaxExportBatchSize);
+            Assert.Equal(3, parentOptions.BatchExportProcessorOptions.ExporterTimeoutMilliseconds);
+            Assert.Equal(4, parentOptions.BatchExportProcessorOptions.ScheduledDelayMilliseconds);
+
+            var options = new BatchExportActivityProcessorOptions(configuration);
+
+            Assert.Equal(1, options.MaxQueueSize);
+            Assert.Equal(2, options.MaxExportBatchSize);
+            Assert.Equal(3, options.ExporterTimeoutMilliseconds);
             Assert.Equal(4, options.ScheduledDelayMilliseconds);
         }
 
@@ -88,7 +121,7 @@ namespace OpenTelemetry.Trace.Tests
             Assert.Equal("OTEL_BSP_SCHEDULE_DELAY", BatchExportActivityProcessorOptions.ScheduledDelayEnvVarKey);
         }
 
-        private void ClearEnvVars()
+        private static void ClearEnvVars()
         {
             Environment.SetEnvironmentVariable(BatchExportActivityProcessorOptions.ExporterTimeoutEnvVarKey, null);
             Environment.SetEnvironmentVariable(BatchExportActivityProcessorOptions.MaxExportBatchSizeEnvVarKey, null);

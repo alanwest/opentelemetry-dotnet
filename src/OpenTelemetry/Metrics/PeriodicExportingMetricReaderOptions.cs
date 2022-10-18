@@ -14,13 +14,49 @@
 // limitations under the License.
 // </copyright>
 
+using Microsoft.Extensions.Configuration;
+using OpenTelemetry.Internal;
+
 namespace OpenTelemetry.Metrics
 {
     public class PeriodicExportingMetricReaderOptions
     {
+        internal const string OTelMetricExportIntervalEnvVarKey = "OTEL_METRIC_EXPORT_INTERVAL";
+        internal const string OTelMetricExportTimeoutEnvVarKey = "OTEL_METRIC_EXPORT_TIMEOUT";
+
         /// <summary>
-        /// Gets or sets the metric export interval in milliseconds. The default value is <c>60000</c>.
+        /// Initializes a new instance of the <see cref="PeriodicExportingMetricReaderOptions"/> class.
         /// </summary>
-        public int ExportIntervalMilliseconds { get; set; } = 60000;
+        public PeriodicExportingMetricReaderOptions()
+            : this(new ConfigurationBuilder().AddEnvironmentVariables().Build())
+        {
+        }
+
+        internal PeriodicExportingMetricReaderOptions(IConfiguration configuration)
+        {
+            if (configuration.TryGetIntValue(OTelMetricExportIntervalEnvVarKey, out var interval))
+            {
+                this.ExportIntervalMilliseconds = interval;
+            }
+
+            if (configuration.TryGetIntValue(OTelMetricExportTimeoutEnvVarKey, out var timeout))
+            {
+                this.ExportTimeoutMilliseconds = timeout;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the metric export interval in milliseconds.
+        /// If not set, the default value depends on the type of metric exporter
+        /// associated with the metric reader.
+        /// </summary>
+        public int? ExportIntervalMilliseconds { get; set; }
+
+        /// <summary>
+        /// Gets or sets the metric export timeout in milliseconds.
+        /// If not set, the default value depends on the type of metric exporter
+        /// associated with the metric reader.
+        /// </summary>
+        public int? ExportTimeoutMilliseconds { get; set; }
     }
 }

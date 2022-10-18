@@ -2,6 +2,100 @@
 
 ## Unreleased
 
+## 1.0.0-rc9.8
+
+Released 2022-Oct-17
+
+## 1.0.0-rc9.7
+
+Released 2022-Sep-29
+
+* Performance improvement (Reduced memory allocation) - Updated DiagnosticSource
+event subscription to specific set of events.
+([#3519](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3519))
+
+* Added overloads which accept a name to the `TracerProviderBuilder`
+  `AddAspNetCoreInstrumentation` extension to allow for more fine-grained
+  options management
+  ([#3661](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3661))
+
+* Fix issue where when an application has an ExceptionFilter, the exception data
+  wouldn't be collected.
+  ([#3475](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3475))
+
+## 1.0.0-rc9.6
+
+Released 2022-Aug-18
+
+* Removed `netstandard2.0` and `netstandard2.1` targets. .NET 5 reached EOL
+  in May 2022 and .NET Core 3.1 reaches EOL in December 2022. End of support
+  dates for .NET are published
+  [here](https://dotnet.microsoft.com/download/dotnet). The
+  instrumentation for ASP.NET Core now requires .NET 6 or later.
+  ([#3567](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3567))
+
+* Fixed an issue where activity started within middleware was modified by
+  instrumentation library.
+  ([#3498](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3498))
+
+* Updated to use Activity native support from
+  `System.Diagnostics.DiagnosticSource` to set activity status.
+  ([#3118](https://github.com/open-telemetry/opentelemetry-dotnet/issues/3118))
+  ([#3555](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3555))
+
+## 1.0.0-rc9.5
+
+Released 2022-Aug-02
+
+* Fix Remote IP Address - NULL reference exception.
+  ([#3481](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3481))
+* Metrics instrumentation to correctly populate `http.flavor` tag.
+  (1.1 instead of HTTP/1.1 etc.)
+  ([#3379](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3379))
+* Tracing instrumentation to populate `http.flavor` tag.
+  ([#3372](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3372))
+* Tracing instrumentation to populate `http.scheme` tag.
+  ([#3392](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3392))
+
+## 1.0.0-rc9.4
+
+Released 2022-Jun-03
+
+* Added additional metric dimensions.
+  ([#3247](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3247))
+* Removes net5.0 target as .NET 5.0 is going out
+  of support. The package keeps netstandard2.1 target, so it
+  can still be used with .NET5.0 apps.
+  ([#3147](https://github.com/open-telemetry/opentelemetry-dotnet/issues/3147))
+
+## 1.0.0-rc9.3
+
+Released 2022-Apr-15
+
+## 1.0.0-rc9.2
+
+Released 2022-Apr-12
+
+## 1.0.0-rc9.1
+
+Released 2022-Mar-30
+
+* Fix: Http server span status is now unset for `400`-`499`.
+  ([#2904](https://github.com/open-telemetry/opentelemetry-dotnet/pull/2904))
+* Fix: drop direct reference of the `Microsoft.AspNetCore.Http.Features` from
+  net5 & net6 targets (already part of the FrameworkReference since the net5).
+  ([#2860](https://github.com/open-telemetry/opentelemetry-dotnet/pull/2860))
+* Reduce allocations calculating the http.url tag.
+  ([#2947](https://github.com/open-telemetry/opentelemetry-dotnet/pull/2947))
+
+## 1.0.0-rc10 (broken. use 1.0.0-rc9.1 and newer)
+
+Released 2022-Mar-04
+
+## 1.0.0-rc9
+
+Released 2022-Feb-02
+
 ## 1.0.0-rc8
 
 Released 2021-Oct-08
@@ -75,7 +169,7 @@ Released 2020-Nov-5
   [Grpc.AspNetCore](https://www.nuget.org/packages/Grpc.AspNetCore/). This
   option is enabled by default.
   ([#1423](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1423))
-* Renamed TextMapPropagator to TraceContextPropagator, CompositePropapagor to
+* Renamed TextMapPropagator to TraceContextPropagator, CompositePropagator to
   CompositeTextMapPropagator. IPropagator is renamed to TextMapPropagator and
   changed from interface to abstract class.
   ([#1427](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1427))
@@ -104,7 +198,7 @@ Released 2020-Sep-15
   added by the library are removed from the span. The information from these
   attributes is contained in other attributes that follow the conventions of
   OpenTelemetry.
-  ([#1260](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1260)).
+  ([#1260](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1260))
 
 ## 0.5.0-beta.2
 

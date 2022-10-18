@@ -15,6 +15,8 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests
@@ -29,6 +31,7 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests
         public void Dispose()
         {
             ClearEnvVars();
+            GC.SuppressFinalize(this);
         }
 
         [Fact]
@@ -43,6 +46,19 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests
         }
 
         [Fact]
+        public void OtlpExporterOptions_DefaultsForHttpProtobuf()
+        {
+            var options = new OtlpExporterOptions
+            {
+                Protocol = OtlpExportProtocol.HttpProtobuf,
+            };
+            Assert.Equal(new Uri("http://localhost:4318"), options.Endpoint);
+            Assert.Null(options.Headers);
+            Assert.Equal(10000, options.TimeoutMilliseconds);
+            Assert.Equal(OtlpExportProtocol.HttpProtobuf, options.Protocol);
+        }
+
+        [Fact]
         public void OtlpExporterOptions_EnvironmentVariableOverride()
         {
             Environment.SetEnvironmentVariable(OtlpExporterOptions.EndpointEnvVarName, "http://test:8888");
@@ -51,6 +67,29 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests
             Environment.SetEnvironmentVariable(OtlpExporterOptions.ProtocolEnvVarName, "http/protobuf");
 
             var options = new OtlpExporterOptions();
+
+            Assert.Equal(new Uri("http://test:8888"), options.Endpoint);
+            Assert.Equal("A=2,B=3", options.Headers);
+            Assert.Equal(2000, options.TimeoutMilliseconds);
+            Assert.Equal(OtlpExportProtocol.HttpProtobuf, options.Protocol);
+        }
+
+        [Fact]
+        public void OtlpExporterOptions_UsingIConfiguration()
+        {
+            var values = new Dictionary<string, string>()
+            {
+                [OtlpExporterOptions.EndpointEnvVarName] = "http://test:8888",
+                [OtlpExporterOptions.HeadersEnvVarName] = "A=2,B=3",
+                [OtlpExporterOptions.TimeoutEnvVarName] = "2000",
+                [OtlpExporterOptions.ProtocolEnvVarName] = "http/protobuf",
+            };
+
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(values)
+                .Build();
+
+            var options = new OtlpExporterOptions(configuration);
 
             Assert.Equal(new Uri("http://test:8888"), options.Endpoint);
             Assert.Equal("A=2,B=3", options.Headers);
@@ -102,6 +141,26 @@ namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests
             Assert.Equal("C=3", options.Headers);
             Assert.Equal(40000, options.TimeoutMilliseconds);
             Assert.Equal(OtlpExportProtocol.HttpProtobuf, options.Protocol);
+        }
+
+        [Fact]
+        public void OtlpExporterOptions_ProtocolSetterDoesNotOverrideCustomEndpointFromEnvVariables()
+        {
+            Environment.SetEnvironmentVariable(OtlpExporterOptions.EndpointEnvVarName, "http://test:8888");
+
+            var options = new OtlpExporterOptions { Protocol = OtlpExportProtocol.Grpc };
+
+            Assert.Equal(new Uri("http://test:8888"), options.Endpoint);
+            Assert.Equal(OtlpExportProtocol.Grpc, options.Protocol);
+        }
+
+        [Fact]
+        public void OtlpExporterOptions_ProtocolSetterDoesNotOverrideCustomEndpointFromSetter()
+        {
+            var options = new OtlpExporterOptions { Endpoint = new Uri("http://test:8888"), Protocol = OtlpExportProtocol.Grpc };
+
+            Assert.Equal(new Uri("http://test:8888"), options.Endpoint);
+            Assert.Equal(OtlpExportProtocol.Grpc, options.Protocol);
         }
 
         [Fact]

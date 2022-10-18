@@ -28,15 +28,15 @@ namespace Examples.Console;
 
 internal class TestPrometheusExporter
 {
-    private static readonly Meter MyMeter = new Meter("MyMeter");
-    private static readonly Meter MyMeter2 = new Meter("MyMeter2");
+    private static readonly Meter MyMeter = new("MyMeter");
+    private static readonly Meter MyMeter2 = new("MyMeter2");
     private static readonly Counter<double> Counter = MyMeter.CreateCounter<double>("myCounter", description: "A counter for demonstration purpose.");
     private static readonly Histogram<long> MyHistogram = MyMeter.CreateHistogram<long>("myHistogram");
-    private static readonly ThreadLocal<Random> ThreadLocalRandom = new ThreadLocal<Random>(() => new Random());
+    private static readonly ThreadLocal<Random> ThreadLocalRandom = new(() => new Random());
 
     internal static object Run(int port)
     {
-        /* prometheus.yml
+        /* prometheus.yml example. Adjust port as per actual.
 
         global:
           scrape_interval: 1s
@@ -45,18 +45,14 @@ internal class TestPrometheusExporter
         scrape_configs:
           - job_name: "opentelemetry"
             static_configs:
-              - targets: ["localhost:9184"]
+              - targets: ["localhost:9464"]
         */
 
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
             .AddMeter(MyMeter.Name)
             .AddMeter(MyMeter2.Name)
-            .AddPrometheusExporter(options =>
-            {
-                options.StartHttpListener = true;
-                options.HttpListenerPrefixes = new string[] { $"http://localhost:{port}/" };
-                options.ScrapeResponseCacheDurationMilliseconds = 0;
-            })
+            .AddPrometheusHttpListener(
+                options => options.UriPrefixes = new string[] { $"http://localhost:{port}/" })
             .Build();
 
         var process = Process.GetCurrentProcess();
@@ -83,10 +79,23 @@ internal class TestPrometheusExporter
             }
         });
 
-        System.Console.WriteLine($"PrometheusExporter is listening on http://localhost:{port}/metrics/");
-        System.Console.WriteLine($"Press any key to exit...");
-        System.Console.ReadKey();
-        token.Cancel();
+        System.Console.WriteLine($"PrometheusExporter exposes metrics via http://localhost:{port}/metrics/");
+        System.Console.WriteLine($"Press Esc key to exit...");
+        while (true)
+        {
+            if (System.Console.KeyAvailable)
+            {
+                var key = System.Console.ReadKey(true).Key;
+                if (key == ConsoleKey.Escape)
+                {
+                    token.Cancel();
+                    System.Console.WriteLine($"Exiting...");
+                    break;
+                }
+            }
+
+            Task.Delay(200).Wait();
+        }
 
         return null;
     }

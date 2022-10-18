@@ -32,13 +32,13 @@ namespace OpenTelemetry.Instrumentation.SqlClient.Implementation
         public const string SqlDataWriteCommandError = "System.Data.SqlClient.WriteCommandError";
         public const string SqlMicrosoftWriteCommandError = "Microsoft.Data.SqlClient.WriteCommandError";
 
-        private readonly PropertyFetcher<object> commandFetcher = new PropertyFetcher<object>("Command");
-        private readonly PropertyFetcher<object> connectionFetcher = new PropertyFetcher<object>("Connection");
-        private readonly PropertyFetcher<object> dataSourceFetcher = new PropertyFetcher<object>("DataSource");
-        private readonly PropertyFetcher<object> databaseFetcher = new PropertyFetcher<object>("Database");
-        private readonly PropertyFetcher<CommandType> commandTypeFetcher = new PropertyFetcher<CommandType>("CommandType");
-        private readonly PropertyFetcher<object> commandTextFetcher = new PropertyFetcher<object>("CommandText");
-        private readonly PropertyFetcher<Exception> exceptionFetcher = new PropertyFetcher<Exception>("Exception");
+        private readonly PropertyFetcher<object> commandFetcher = new("Command");
+        private readonly PropertyFetcher<object> connectionFetcher = new("Connection");
+        private readonly PropertyFetcher<object> dataSourceFetcher = new("DataSource");
+        private readonly PropertyFetcher<object> databaseFetcher = new("Database");
+        private readonly PropertyFetcher<CommandType> commandTypeFetcher = new("CommandType");
+        private readonly PropertyFetcher<object> commandTextFetcher = new("CommandText");
+        private readonly PropertyFetcher<Exception> exceptionFetcher = new("Exception");
         private readonly SqlClientInstrumentationOptions options;
 
         public SqlClientDiagnosticListener(string sourceName, SqlClientInstrumentationOptions options)
@@ -49,8 +49,9 @@ namespace OpenTelemetry.Instrumentation.SqlClient.Implementation
 
         public override bool SupportsNullActivity => true;
 
-        public override void OnCustom(string name, Activity activity, object payload)
+        public override void OnEventWritten(string name, object payload)
         {
+            var activity = Activity.Current;
             switch (name)
             {
                 case SqlDataBeforeExecuteCommand:
@@ -79,6 +80,24 @@ namespace OpenTelemetry.Instrumentation.SqlClient.Implementation
 
                         if (activity.IsAllDataRequested)
                         {
+                            try
+                            {
+                                if (this.options.Filter?.Invoke(command) == false)
+                                {
+                                    SqlClientInstrumentationEventSource.Log.CommandIsFilteredOut(activity.OperationName);
+                                    activity.IsAllDataRequested = false;
+                                    activity.ActivityTraceFlags &= ~ActivityTraceFlags.Recorded;
+                                    return;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                SqlClientInstrumentationEventSource.Log.CommandFilterException(ex);
+                                activity.IsAllDataRequested = false;
+                                activity.ActivityTraceFlags &= ~ActivityTraceFlags.Recorded;
+                                return;
+                            }
+
                             _ = this.connectionFetcher.TryFetch(command, out var connection);
                             _ = this.databaseFetcher.TryFetch(connection, out var database);
 
@@ -145,17 +164,7 @@ namespace OpenTelemetry.Instrumentation.SqlClient.Implementation
                             return;
                         }
 
-                        try
-                        {
-                            if (activity.IsAllDataRequested)
-                            {
-                                activity.SetStatus(Status.Unset);
-                            }
-                        }
-                        finally
-                        {
-                            activity.Stop();
-                        }
+                        activity.Stop();
                     }
 
                     break;
@@ -179,7 +188,7 @@ namespace OpenTelemetry.Instrumentation.SqlClient.Implementation
                             {
                                 if (this.exceptionFetcher.TryFetch(payload, out Exception exception) && exception != null)
                                 {
-                                    activity.SetStatus(Status.Error.WithDescription(exception.Message));
+                                    activity.SetStatus(ActivityStatusCode.Error, exception.Message);
 
                                     if (this.options.RecordException)
                                     {

@@ -2,6 +2,94 @@
 
 ## Unreleased
 
+## 1.0.0-rc9.8
+
+Released 2022-Oct-17
+
+* In case of .NET Core, additional spans created during retries will now be
+exported.
+([[#3729](https://github.com/open-telemetry/opentelemetry-dotnet/issues/3729)])
+
+## 1.0.0-rc9.7
+
+Released 2022-Sep-29
+
+* Dropped `netstandard2.0` target and added `net6.0`. .NET 5 reached EOL
+  in May 2022 and .NET Core 3.1 reaches EOL in December 2022. End of support
+  dates for .NET are published
+  [here](https://dotnet.microsoft.com/download/dotnet).
+  The instrumentation for HttpClient now requires .NET 6 or later.
+  This does not affect applications targeting .NET Framework.
+  ([#3664](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3664))
+
+* Added overloads which accept a name to the `TracerProviderBuilder`
+  `AddHttpClientInstrumentation` extension to allow for more fine-grained
+  options management
+  ([#3664](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3664),
+  [#3667](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3667))
+
+## 1.0.0-rc9.6
+
+Released 2022-Aug-18
+
+* Updated to use Activity native support from `System.Diagnostics.DiagnosticSource`
+  to set activity status.
+  ([#3118](https://github.com/open-telemetry/opentelemetry-dotnet/issues/3118))
+  ([#3555](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3555))
+
+* Changed activity source name from `OpenTelemetry.HttpWebRequest`
+  to `OpenTelemetry.Instrumentation.Http.HttpWebRequest` for `HttpWebRequest`s
+  and from `OpenTelemetry.Instrumentation.Http`
+  to `OpenTelemetry.Instrumentation.Http.HttpClient` for `HttpClient`.
+  ([#3515](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3515))
+
+## 1.0.0-rc9.5
+
+Released 2022-Aug-02
+
+* Added `http.scheme` tag to tracing instrumentation.
+  ([#3464](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3464))
+
+* [Breaking] Removes `SetHttpFlavor` option. "http.flavor" is
+  now always automatically populated.
+  To remove this tag, set "http.flavor" to null using `ActivityProcessor`.
+  ([#3380](https://github.com/open-telemetry/opentelemetry-dotnet/issues/3380))
+
+* Fix `Enrich` not getting invoked when SocketException due to HostNotFound
+  occurs.
+  ([#3407](https://github.com/open-telemetry/opentelemetry-dotnet/issues/3407))
+
+## 1.0.0-rc9.4
+
+Released 2022-Jun-03
+
+## 1.0.0-rc9.3
+
+Released 2022-Apr-15
+
+* Removes .NET Framework 4.6.1. The minimum .NET Framework
+  version supported is .NET 4.6.2. ([#3190](https://github.com/open-telemetry/opentelemetry-dotnet/issues/3190))
+
+## 1.0.0-rc9.2
+
+Released 2022-Apr-12
+
+## 1.0.0-rc9.1
+
+Released 2022-Mar-30
+
+* Updated `TracerProviderBuilderExtensions.AddHttpClientInstrumentation` to support
+  `IDeferredTracerProviderBuilder` and `IOptions<HttpClientInstrumentationOptions>`
+  ([#3051](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3051))
+
+## 1.0.0-rc10 (broken. use 1.0.0-rc9.1 and newer)
+
+Released 2022-Mar-04
+
+## 1.0.0-rc9
+
+Released 2022-Feb-02
+
 * Fixed an issue with `Filter` and `Enrich` callbacks not firing under certain
   conditions when gRPC is used
   ([#2698](https://github.com/open-telemetry/opentelemetry-dotnet/pull/2698))
@@ -84,7 +172,7 @@ Released 2020-Nov-5
   `HttpWebRequest` in Activity.CustomProperty. To enrich activity, use the
   Enrich action on the instrumentation.
   ([#1407](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1407))
-* Renamed TextMapPropagator to TraceContextPropagator, CompositePropapagor to
+* Renamed TextMapPropagator to TraceContextPropagator, CompositePropagator to
   CompositeTextMapPropagator. IPropagator is renamed to TextMapPropagator and
   changed from interface to abstract class.
   ([#1427](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1427))
