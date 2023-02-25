@@ -42,32 +42,7 @@ namespace OpenTelemetry.Instrumentation.Http.Tests
             Assert.Null(Activity.Current);
             Activity.DefaultIdFormat = ActivityIdFormat.W3C;
             Activity.ForceDefaultIdFormat = false;
-
-            this.serverLifeTime = TestHttpServer.RunServer(
-                (ctx) =>
-                {
-                    if (string.IsNullOrWhiteSpace(ctx.Request.Headers["traceparent"])
-                        && string.IsNullOrWhiteSpace(ctx.Request.Headers["custom_traceparent"])
-                        && ctx.Request.QueryString["bypassHeaderCheck"] != "true")
-                    {
-                        ctx.Response.StatusCode = 500;
-                        ctx.Response.StatusDescription = "Missing trace context";
-                    }
-                    else if (ctx.Request.Url.PathAndQuery.Contains("500"))
-                    {
-                        ctx.Response.StatusCode = 500;
-                    }
-                    else
-                    {
-                        ctx.Response.StatusCode = 200;
-                    }
-
-                    ctx.Response.OutputStream.Close();
-                },
-                out var host,
-                out var port);
-
-            this.url = $"http://{host}:{port}/";
+            HttpTestHelpers.CreateTestHttpServer(out this.url, out this.serverLifeTime);
         }
 
         public void Dispose()
@@ -304,6 +279,58 @@ namespace OpenTelemetry.Instrumentation.Http.Tests
                 Assert.Equal(parentContext.SpanId, contextFromPropagator.SpanId);
             }
 #endif
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task PropagationWorks(bool sample)
+        {
+            var processorInvokedCount = 0;
+            ActivityContext processedContext = default;
+            var traceparentString = string.Empty;
+            var exportedItems = new List<Activity>();
+
+            using (var traceprovider = Sdk.CreateTracerProviderBuilder()
+               .AddHttpClientInstrumentation()
+               .AddProcessor(new TestActivityProcessor
+               {
+                    StartAction = (activity) =>
+                    {
+                        ++processorInvokedCount;
+                        processedContext = activity.Context;
+                    },
+               })
+               .AddInMemoryExporter(exportedItems)
+               .SetSampler(
+                    sample
+                        ? new AlwaysOnSampler()
+                        : new TestSampler { SamplingAction = (samplingParams) => new SamplingResult(SamplingDecision.RecordOnly) })
+               .Build())
+            {
+                var request = (HttpWebRequest)WebRequest.Create(this.url);
+                request.Method = "GET";
+                using var response = await request.GetResponseAsync().ConfigureAwait(false);
+                using (var reader = new StreamReader(response.GetResponseStream()))
+                {
+                    traceparentString = reader.ReadToEnd();
+                }
+            }
+
+            Assert.Equal(1, processorInvokedCount);
+            Assert.True(processedContext != default);
+            Assert.True(HttpTestHelpers.TryCreateActivityContextFromTraceparent(traceparentString, out var propagatedContext));
+            Assert.Equal(processedContext, propagatedContext);
+
+            if (!sample)
+            {
+                Assert.Empty(exportedItems);
+            }
+            else
+            {
+                Assert.Single(exportedItems);
+                Assert.Equal(exportedItems[0].Context, propagatedContext);
+            }
         }
 
         [Theory]

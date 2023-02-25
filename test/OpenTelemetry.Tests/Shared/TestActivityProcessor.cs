@@ -20,9 +20,6 @@ namespace OpenTelemetry.Tests
 {
     internal class TestActivityProcessor : BaseProcessor<Activity>
     {
-        public Action<Activity> StartAction;
-        public Action<Activity> EndAction;
-
         public TestActivityProcessor()
         {
         }
@@ -32,6 +29,10 @@ namespace OpenTelemetry.Tests
             this.StartAction = onStart;
             this.EndAction = onEnd;
         }
+
+        public Action<Activity> StartAction { get; set; }
+
+        public Action<Activity> EndAction { get; set; }
 
         public bool ShutdownCalled { get; private set; } = false;
 
