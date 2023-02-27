@@ -41,7 +41,8 @@ If you are new here, please read the getting started docs:
 
 * [logs](./docs/logs/getting-started/README.md)
 * [metrics](./docs/metrics/getting-started/README.md)
-* [traces](./docs/trace/getting-started/README.md)
+* traces: [ASP.NET Core](./docs/trace/getting-started-aspnetcore/README.md) |
+  [Console](./docs/trace/getting-started-console/README.md)
 
 This repository includes multiple installable components, available on
 [NuGet](https://www.nuget.org/profiles/OpenTelemetry). Each component has its
@@ -78,6 +79,12 @@ See the [OpenTelemetry registry](https://opentelemetry.io/registry/?s=net) and
 [OpenTelemetry .NET Contrib
 repo](https://github.com/open-telemetry/opentelemetry-dotnet-contrib) for more
 components.
+
+## Troubleshooting
+
+See [Troubleshooting](./src/OpenTelemetry/README.md#troubleshooting).
+Additionally check readme file for the individual components for any additional
+troubleshooting information.
 
 ## Extensibility
 

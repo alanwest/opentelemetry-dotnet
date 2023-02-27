@@ -30,7 +30,7 @@ namespace OpenTelemetry.Metrics.Tests
         [Fact]
         public void HistogramDistributeToAllBucketsDefault()
         {
-            var histogramPoint = new MetricPoint(this.aggregatorStore, AggregationType.HistogramWithBuckets, null, null, Metric.DefaultHistogramBounds, 0);
+            var histogramPoint = new MetricPoint(this.aggregatorStore, AggregationType.HistogramWithBuckets, null, Metric.DefaultHistogramBounds, 0);
             histogramPoint.Update(-1);
             histogramPoint.Update(0);
             histogramPoint.Update(2);
@@ -81,7 +81,7 @@ namespace OpenTelemetry.Metrics.Tests
         public void HistogramDistributeToAllBucketsCustom()
         {
             var boundaries = new double[] { 10, 20 };
-            var histogramPoint = new MetricPoint(this.aggregatorStore, AggregationType.HistogramWithBuckets, null, null, boundaries, 0);
+            var histogramPoint = new MetricPoint(this.aggregatorStore, AggregationType.HistogramWithBuckets, null, boundaries, 0);
 
             // 5 recordings <=10
             histogramPoint.Update(-10);
@@ -129,7 +129,7 @@ namespace OpenTelemetry.Metrics.Tests
                 boundaries[i] = i;
             }
 
-            var histogramPoint = new MetricPoint(this.aggregatorStore, AggregationType.HistogramWithBuckets, null, null, boundaries, 0);
+            var histogramPoint = new MetricPoint(this.aggregatorStore, AggregationType.HistogramWithBuckets, null, boundaries, 0);
 
             // Act
             histogramPoint.Update(-1);
@@ -162,7 +162,7 @@ namespace OpenTelemetry.Metrics.Tests
         public void HistogramWithOnlySumCount()
         {
             var boundaries = Array.Empty<double>();
-            var histogramPoint = new MetricPoint(this.aggregatorStore, AggregationType.Histogram, null, null, boundaries, 0);
+            var histogramPoint = new MetricPoint(this.aggregatorStore, AggregationType.Histogram, null, boundaries, 0);
 
             histogramPoint.Update(-10);
             histogramPoint.Update(0);

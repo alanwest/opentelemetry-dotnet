@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 1.0.0-rc9.14
+
+Released 2023-Feb-24
+
+* Updated OpenTelemetry.Api.ProviderBuilderExtensions dependency to 1.4.0
+
+## 1.4.0-rc9.13
+
+Released 2023-Feb-10
+
+## 1.0.0-rc9.12
+
+Released 2023-Feb-01
+
+## 1.0.0-rc9.11
+
+Released 2023-Jan-09
+
 ## 1.0.0-rc9.10
 
 Released 2022-Dec-12
