@@ -46,8 +46,9 @@ namespace Examples.Console
         /// <param name="args">Arguments from command line.</param>
         public static void Main(string[] args)
         {
-            Parser.Default.ParseArguments<JaegerOptions, ZipkinOptions, PrometheusOptions, MetricsOptions, LogsOptions, GrpcNetClientOptions, HttpClientOptions, ZPagesOptions, ConsoleOptions, OpenTelemetryShimOptions, OpenTracingShimOptions, OtlpOptions, InMemoryOptions>(args)
+            Parser.Default.ParseArguments<HistogramOptions, JaegerOptions, ZipkinOptions, PrometheusOptions, MetricsOptions, LogsOptions, GrpcNetClientOptions, HttpClientOptions, ZPagesOptions, ConsoleOptions, OpenTelemetryShimOptions, OpenTracingShimOptions, OtlpOptions, InMemoryOptions>(args)
                 .MapResult(
+                    (HistogramOptions options) => HistogramComparison.Run(),
                     (JaegerOptions options) => TestJaegerExporter.Run(options.Host, options.Port),
                     (ZipkinOptions options) => TestZipkinExporter.Run(options.Uri),
                     (PrometheusOptions options) => TestPrometheusExporter.Run(options.Port),
@@ -66,6 +67,11 @@ namespace Examples.Console
     }
 
 #pragma warning disable SA1402 // File may only contain a single type
+
+    [Verb("histograms", HelpText = "")]
+    internal class HistogramOptions
+    {
+    }
 
     [Verb("jaeger", HelpText = "Specify the options required to test Jaeger exporter")]
     internal class JaegerOptions

@@ -88,6 +88,7 @@ public sealed class CircularBufferBuckets
             this.trait = new long[capacity];
 
             this.begin = index;
+            Console.WriteLine($"Initial offset set to {this.begin}");
             this.end = index;
             this.trait[this.ModuloIndex(index)] += value;
 
@@ -117,6 +118,11 @@ public sealed class CircularBufferBuckets
         if (diff >= capacity || diff < 0)
         {
             return CalculateScaleReduction(begin, end, capacity);
+        }
+
+        if (this.begin != begin)
+        {
+            Console.WriteLine($"Offset adjusted to {begin}");
         }
 
         this.begin = begin;
@@ -185,6 +191,11 @@ public sealed class CircularBufferBuckets
 
             currentBegin = newBegin;
             currentEnd = newEnd;
+        }
+
+        if (this.begin != currentBegin)
+        {
+            Console.WriteLine($"Offset adjusted to {currentBegin}");
         }
 
         this.begin = currentBegin;

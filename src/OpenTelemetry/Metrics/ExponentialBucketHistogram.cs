@@ -213,6 +213,9 @@ public sealed class ExponentialBucketHistogram
         this.NegativeBuckets.ScaleDown(n);
         this.Scale -= n;
         n = buckets.TryIncrement(index >> n);
+
+        Console.WriteLine($"Scale down to {this.Scale}");
+
         Debug.Assert(n == 0, "Increment should always succeed after scale down.");
     }
 
