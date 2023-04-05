@@ -388,7 +388,7 @@ namespace OpenTelemetry.Instrumentation.AspNetCore.Implementation
             var length = scheme.Length + Uri.SchemeDelimiter.Length + host.Length + pathBase.Length
                          + path.Length + queryString.Length;
 
-#if NETSTANDARD2_1_OR_GREATER || NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
             return string.Create(length, (scheme, host, pathBase, path, queryString), (span, parts) =>
             {
                 CopyTo(ref span, parts.scheme);
