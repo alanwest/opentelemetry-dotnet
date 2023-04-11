@@ -6,6 +6,8 @@
     <PackageTags>$(PackageTags);OTLP</PackageTags>
     <MinVerTagPrefix>core-</MinVerTagPrefix>
 
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
     <!-- this is temporary. will remove in future PR. -->
     <Nullable>disable</Nullable>
   </PropertyGroup>
@@ -17,8 +19,9 @@
   <ItemGroup>
     <PackageReference Include="Grpc.Net.Client" Version="$(GrpcNetClientPkgVer)" Condition="'$(TargetFramework)' == 'netstandard2.1' OR '$(TargetFramework)' == 'net6.0'" />
     <PackageReference Include="Grpc" Version="$(GrpcPkgVer)" Condition="'$(TargetFramework)' == 'netstandard2.0' OR '$(TargetFramework)' == 'net462'" />
-    <PackageReference Include="Google.Protobuf" Version="$(GoogleProtobufPkgVer)" />
+    <PackageReference Include="Google.Protobuf" Version="$(GoogleProtobufPkgVer)" PrivateAssets="all" />
     <PackageReference Include="Grpc.Tools" Version="$(GrpcToolsPkgVer)" PrivateAssets="all" />
+    <PackageReference Include="ILRepack" Version="2.0.18" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,5 +45,29 @@
       <ProtoRoot>Implementation</ProtoRoot>
     </Protobuf>
   </ItemGroup>
+
+
+  <Target Name="ILRepack" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
+    <ItemGroup>
+      <PossibleRefsForILRepack Include="$(OutputPath)*.dll" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ILRepackInclude Include="@(PossibleRefsForILRepack)" Condition="'%(FileName)' == 'Google.Protobuf'" />
+    </ItemGroup>
+
+    <Message Importance="High" Text="ILRepack Include: %(ILRepackInclude.FullPath)" />
+
+    <PropertyGroup>
+      <ILRepackSearchDirOutputPath>$([System.String]::new("$(OutputPath)").Trim('\'))</ILRepackSearchDirOutputPath>
+    </PropertyGroup>
+
+    <PropertyGroup>
+      <ILRepackCommand>"$(ILRepack)" --parallel --internalize --norepackres --keepotherversionreferences --keyfile:"$(AssemblyOriginatorKeyFile)" --lib:"$(ILRepackSearchDirOutputPath)" --out:"$(OutputPath)..\$(TargetFramework)-ILRepacked\$(AssemblyName).dll" "$(TargetPath)" "@(ILRepackInclude, '" "')"</ILRepackCommand>
+    </PropertyGroup>
+
+    <Message Importance="High" Text="Executing ILRepack.exe for $(TargetFramework) build: $(ILRepackCommand)" />
+    <Exec Command="$(ILRepackCommand)" />
+  </Target>
 
 </Project>
