@@ -14,111 +14,153 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using System.Threading;
 using BenchmarkDotNet.Attributes;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Tests;
 
 /*
-BenchmarkDotNet=v0.12.1, OS=Windows 10.0.19043
-Intel Core i7-8650U CPU 1.90GHz (Kaby Lake R), 1 CPU, 8 logical and 4 physical cores
-.NET Core SDK=5.0.401
-  [Host]     : .NET Core 5.0.10 (CoreCLR 5.0.1021.41214, CoreFX 5.0.1021.41214), X64 RyuJIT
-  DefaultJob : .NET Core 5.0.10 (CoreCLR 5.0.1021.41214, CoreFX 5.0.1021.41214), X64 RyuJIT
+BenchmarkDotNet=v0.13.5, OS=Windows 11 (10.0.23424.1000)
+Intel Core i7-9700 CPU 3.00GHz, 1 CPU, 8 logical and 8 physical cores
+.NET SDK=7.0.203
+  [Host]     : .NET 7.0.5 (7.0.523.17405), X64 RyuJIT AVX2
+  DefaultJob : .NET 7.0.5 (7.0.523.17405), X64 RyuJIT AVX2
 
 
-|                                   Method |           ViewConfig |     Mean |    Error |   StdDev | Gen 0 | Gen 1 | Gen 2 | Allocated |
-|----------------------------------------- |--------------------- |---------:|---------:|---------:|------:|------:|------:|----------:|
-| CounterMeasurementRecordingWithThreeTags |               NoView | 503.2 ns |  8.36 ns |  7.82 ns |     - |     - |     - |         - |
-| CounterMeasurementRecordingWithThreeTags |    ViewNoInstrSelect | 552.7 ns | 10.98 ns | 19.24 ns |     - |     - |     - |         - |
-| CounterMeasurementRecordingWithThreeTags |     ViewSelectsInstr | 556.0 ns | 11.12 ns | 24.18 ns |     - |     - |     - |         - |
+|         Method |   ViewConfig |     Mean |   Error |  StdDev | Allocated |
+|--------------- |------------- |---------:|--------:|--------:|----------:|
+| CounterHotPath |       NoView | 254.6 ns | 1.62 ns | 1.27 ns |         - |
+| CounterHotPath |       ViewNA | 257.9 ns | 3.00 ns | 2.80 ns |         - |
+| CounterHotPath |  ViewApplied | 282.7 ns | 5.60 ns | 6.45 ns |         - |
+| CounterHotPath | ViewToRename | 256.8 ns | 0.83 ns | 0.70 ns |         - |
+| CounterHotPath |  ViewZeroTag | 112.1 ns | 1.87 ns | 1.75 ns |         - |
 */
 
-namespace Benchmarks.Metrics
+namespace Benchmarks.Metrics;
+
+public class MetricsViewBenchmarks
 {
-    [MemoryDiagnoser]
-    public class MetricsViewBenchmarks
+    private static readonly ThreadLocal<Random> ThreadLocalRandom = new(() => new Random());
+    private static readonly string[] DimensionValues = new string[] { "DimVal1", "DimVal2", "DimVal3", "DimVal4", "DimVal5", "DimVal6", "DimVal7", "DimVal8", "DimVal9", "DimVal10" };
+    private static readonly int DimensionsValuesLength = DimensionValues.Length;
+    private List<Metric> metrics;
+    private Counter<long> counter;
+    private MeterProvider provider;
+    private Meter meter;
+
+    public enum ViewConfiguration
     {
-        private static readonly ThreadLocal<Random> ThreadLocalRandom = new ThreadLocal<Random>(() => new Random());
-        private static readonly string[] DimensionValues = new string[] { "DimVal1", "DimVal2", "DimVal3", "DimVal4", "DimVal5", "DimVal6", "DimVal7", "DimVal8", "DimVal9", "DimVal10" };
-        private static readonly int DimensionsValuesLength = DimensionValues.Length;
-        private Counter<long> counter;
-        private MeterProvider provider;
-        private Meter meter;
+        /// <summary>
+        /// No views registered in the provider.
+        /// </summary>
+        NoView,
 
-        public enum ViewConfiguration
+        /// <summary>
+        /// Provider has view registered, but it doesn't select the instrument.
+        /// This tests the perf impact View has on hot path, for those
+        /// instruments not participating in View feature.
+        /// </summary>
+        ViewNA,
+
+        /// <summary>
+        /// Provider has view registered and it does select the instrument
+        /// and keeps the subset of tags.
+        /// </summary>
+        ViewApplied,
+
+        /// <summary>
+        /// Provider has view registered and it does select the instrument
+        /// and renames.
+        /// </summary>
+        ViewToRename,
+
+        /// <summary>
+        /// Provider has view registered and it does select the instrument
+        /// and drops every tag.
+        /// </summary>
+        ViewZeroTag,
+    }
+
+    [Params(
+        ViewConfiguration.NoView,
+        ViewConfiguration.ViewNA,
+        ViewConfiguration.ViewApplied,
+        ViewConfiguration.ViewToRename,
+        ViewConfiguration.ViewZeroTag)]
+    public ViewConfiguration ViewConfig { get; set; }
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        this.meter = new Meter(Utils.GetCurrentMethodName());
+        this.counter = this.meter.CreateCounter<long>("counter");
+        this.metrics = new List<Metric>();
+
+        if (this.ViewConfig == ViewConfiguration.NoView)
         {
-            /// <summary>
-            /// No views registered in the provider.
-            /// </summary>
-            NoView,
-
-            /// <summary>
-            /// Provider has view registered, but it doesn't select the instrument.
-            /// This tests the perf impact View has on hot path, for those
-            /// instruments not participating in View feature.
-            /// </summary>
-            ViewNoInstrSelect,
-
-            /// <summary>
-            /// Provider has view registered and it does select the instrument.
-            /// </summary>
-            ViewSelectsInstr,
+            this.provider = Sdk.CreateMeterProviderBuilder()
+                .AddMeter(this.meter.Name)
+                .AddInMemoryExporter(this.metrics)
+                .Build();
         }
-
-        [Params(
-            ViewConfiguration.NoView,
-            ViewConfiguration.ViewNoInstrSelect,
-            ViewConfiguration.ViewSelectsInstr)]
-        public ViewConfiguration ViewConfig { get; set; }
-
-        [GlobalSetup]
-        public void Setup()
+        else if (this.ViewConfig == ViewConfiguration.ViewNA)
         {
-            this.meter = new Meter("TestMeter");
-            this.counter = this.meter.CreateCounter<long>("counter");
-
-            if (this.ViewConfig == ViewConfiguration.NoView)
-            {
-                this.provider = Sdk.CreateMeterProviderBuilder()
-                    .AddMeter(this.meter.Name)
-                    .Build();
-            }
-            else if (this.ViewConfig == ViewConfiguration.ViewNoInstrSelect)
-            {
-                this.provider = Sdk.CreateMeterProviderBuilder()
-                    .AddMeter(this.meter.Name)
-                    .AddView("nomatch", new MetricStreamConfiguration() { TagKeys = new string[] { "DimName1", "DimName2", "DimName3" } })
-                    .Build();
-            }
-            else if (this.ViewConfig == ViewConfiguration.ViewSelectsInstr)
-            {
-                this.provider = Sdk.CreateMeterProviderBuilder()
-                    .AddMeter(this.meter.Name)
-                    .AddView(this.counter.Name, new MetricStreamConfiguration() { TagKeys = new string[] { "DimName1", "DimName2", "DimName3" } })
-                    .Build();
-            }
+            this.provider = Sdk.CreateMeterProviderBuilder()
+                .AddMeter(this.meter.Name)
+                .AddView("nomatch", new MetricStreamConfiguration() { TagKeys = new string[] { "DimName1", "DimName2", "DimName3" } })
+                .AddInMemoryExporter(this.metrics)
+                .Build();
         }
-
-        [GlobalCleanup]
-        public void Cleanup()
+        else if (this.ViewConfig == ViewConfiguration.ViewApplied)
         {
-            this.meter?.Dispose();
-            this.provider?.Dispose();
+            this.provider = Sdk.CreateMeterProviderBuilder()
+                .AddMeter(this.meter.Name)
+                .AddView(this.counter.Name, new MetricStreamConfiguration() { TagKeys = new string[] { "DimName1", "DimName2", "DimName3" } })
+                .AddInMemoryExporter(this.metrics)
+                .Build();
         }
-
-        [Benchmark]
-        public void CounterMeasurementRecordingWithThreeTags()
+        else if (this.ViewConfig == ViewConfiguration.ViewToRename)
         {
-            var random = ThreadLocalRandom.Value;
-            this.counter?.Add(
-                100,
-                new KeyValuePair<string, object>("DimName1", DimensionValues[random.Next(0, DimensionsValuesLength)]),
-                new KeyValuePair<string, object>("DimName2", DimensionValues[random.Next(0, DimensionsValuesLength)]),
-                new KeyValuePair<string, object>("DimName3", DimensionValues[random.Next(0, DimensionsValuesLength)]));
+            this.provider = Sdk.CreateMeterProviderBuilder()
+                .AddMeter(this.meter.Name)
+                .AddView(this.counter.Name, "newname")
+                .AddInMemoryExporter(this.metrics)
+                .Build();
         }
+        else if (this.ViewConfig == ViewConfiguration.ViewZeroTag)
+        {
+            this.provider = Sdk.CreateMeterProviderBuilder()
+                .AddMeter(this.meter.Name)
+                .AddView(this.counter.Name, new MetricStreamConfiguration() { TagKeys = Array.Empty<string>() })
+                .AddInMemoryExporter(this.metrics)
+                .Build();
+        }
+    }
+
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        this.meter?.Dispose();
+        this.provider?.Dispose();
+    }
+
+    [Benchmark]
+    public void CounterHotPath()
+    {
+        var random = ThreadLocalRandom.Value;
+        var tags = new TagList
+        {
+            { "DimName1", DimensionValues[random.Next(0, 2)] },
+            { "DimName2", DimensionValues[random.Next(0, 2)] },
+            { "DimName3", DimensionValues[random.Next(0, 5)] },
+            { "DimName4", DimensionValues[random.Next(0, 5)] },
+            { "DimName5", DimensionValues[random.Next(0, 10)] },
+        };
+
+        this.counter?.Add(
+            100,
+            tags);
     }
 }

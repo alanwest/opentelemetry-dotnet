@@ -5,7 +5,17 @@
 
 This is an [Instrumentation Library](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/glossary.md#instrumentation-library)
 which instruments [Grpc.Net.Client](https://www.nuget.org/packages/Grpc.Net.Client)
-and collects telemetry about outgoing gRPC requests.
+and collects traces about outgoing gRPC requests.
+
+**Note: This component is based on the OpenTelemetry semantic conventions for
+[traces](https://github.com/open-telemetry/opentelemetry-specification/tree/main/specification/trace/semantic_conventions).
+These conventions are
+[Experimental](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/document-status.md),
+and hence, this package is a [pre-release](../../VERSIONING.md#pre-releases).
+Until a [stable
+version](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/telemetry-stability.md)
+is released, there can be breaking changes. You can track the progress from
+[milestones](https://github.com/open-telemetry/opentelemetry-dotnet/milestone/23).**
 
 ## Supported .NET Versions
 
@@ -22,7 +32,7 @@ Add a reference to the
 package. Also, add any other instrumentations & exporters you will need.
 
 ```shell
-dotnet add package OpenTelemetry.Instrumentation.GrpcNetClient
+dotnet add package --prerelease OpenTelemetry.Instrumentation.GrpcNetClient
 ```
 
 ### Step 2: Enable Grpc.Net.Client Instrumentation at application startup
@@ -89,31 +99,28 @@ using var tracerProvider = Sdk.CreateTracerProviderBuilder()
 
 ### Enrich
 
-This option allows one to enrich the activity with additional information
-from the raw `HttpRequestMessage` object. The `Enrich` action is called only
-when `activity.IsAllDataRequested` is `true`. It contains the activity itself
-(which can be enriched), the name of the event, and the actual raw object.
-For event name "OnStartActivity", the actual object will be
-`HttpRequestMessage`.
-
-The following code snippet shows how to add additional tags using `Enrich`.
+This instrumentation library provides `EnrichWithHttpRequestMessage` and
+`EnrichWithHttpResponseMessage` options that can be used to enrich the activity
+with additional information from the raw `HttpRequestMessage` and
+`HttpResponseMessage` objects respectively. These actions are called only when
+`activity.IsAllDataRequested` is `true`. It contains the activity itself (which
+can be enriched), the name of the event, and the actual raw object. The
+following code snippet shows how to add additional tags using these options.
 
 ```csharp
-services.AddOpenTelemetryTracing((builder) =>
-{
-    builder
-    .AddGrpcClientInstrumentation(opt => opt.Enrich
-        = (activity, eventName, rawObject) =>
-    {
-        if (eventName.Equals("OnStartActivity"))
+services.AddOpenTelemetry()
+    .WithTracing(builder => builder
+        .AddGrpcClientInstrumentation(options =>
         {
-            if (rawObject is HttpRequestMessage request)
+            options.EnrichWithHttpRequestMessage = (activity, httpRequestMessage) =>
             {
-                activity.SetTag("requestVersion", request.Version);
-            }
-        }
-    })
-});
+                activity.SetTag("requestVersion", httpRequestMessage.Version);
+            };
+            options.EnrichWithHttpResponseMessage = (activity, httpResponseMessage) =>
+            {
+                activity.SetTag("responseVersion", httpResponseMessage.Version);
+            };
+        });
 ```
 
 [Processor](../../docs/trace/extending-the-sdk/README.md#processor),

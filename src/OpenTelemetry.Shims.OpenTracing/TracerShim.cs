@@ -14,116 +14,94 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Collections.Generic;
-using global::OpenTracing.Propagation;
 using OpenTelemetry.Context.Propagation;
+using OpenTelemetry.Internal;
+using OpenTracing.Propagation;
 
-namespace OpenTelemetry.Shims.OpenTracing
+namespace OpenTelemetry.Shims.OpenTracing;
+
+public class TracerShim : global::OpenTracing.ITracer
 {
-    public class TracerShim : global::OpenTracing.ITracer
+    private readonly Trace.Tracer tracer;
+    private readonly TextMapPropagator propagator;
+
+    public TracerShim(Trace.Tracer tracer, TextMapPropagator textFormat)
     {
-        private readonly Trace.Tracer tracer;
-        private readonly TextMapPropagator propagator;
+        Guard.ThrowIfNull(tracer);
+        Guard.ThrowIfNull(textFormat);
 
-        public TracerShim(Trace.Tracer tracer, TextMapPropagator textFormat)
+        this.tracer = tracer;
+        this.propagator = textFormat;
+        this.ScopeManager = new ScopeManagerShim();
+    }
+
+    /// <inheritdoc/>
+    public global::OpenTracing.IScopeManager ScopeManager { get; private set; }
+
+    /// <inheritdoc/>
+    public global::OpenTracing.ISpan ActiveSpan => this.ScopeManager.Active?.Span;
+
+    /// <inheritdoc/>
+    public global::OpenTracing.ISpanBuilder BuildSpan(string operationName)
+    {
+        return new SpanBuilderShim(this.tracer, operationName);
+    }
+
+    /// <inheritdoc/>
+    public global::OpenTracing.ISpanContext Extract<TCarrier>(IFormat<TCarrier> format, TCarrier carrier)
+    {
+        Guard.ThrowIfNull(format);
+        Guard.ThrowIfNull(carrier);
+
+        PropagationContext propagationContext = default;
+
+        if ((format == BuiltinFormats.TextMap || format == BuiltinFormats.HttpHeaders) && carrier is ITextMap textMapCarrier)
         {
-            this.tracer = tracer ?? throw new ArgumentNullException(nameof(tracer), "Parameter cannot be null");
-            this.propagator = textFormat ?? throw new ArgumentNullException(nameof(textFormat), "Parameter cannot be null");
+            var carrierMap = new Dictionary<string, IEnumerable<string>>();
 
-            this.ScopeManager = new ScopeManagerShim(this.tracer);
-        }
-
-        /// <inheritdoc/>
-        public global::OpenTracing.IScopeManager ScopeManager { get; private set; }
-
-        /// <inheritdoc/>
-        public global::OpenTracing.ISpan ActiveSpan => this.ScopeManager.Active?.Span;
-
-        /// <inheritdoc/>
-        public global::OpenTracing.ISpanBuilder BuildSpan(string operationName)
-        {
-            return new SpanBuilderShim(this.tracer, operationName);
-        }
-
-        /// <inheritdoc/>
-        public global::OpenTracing.ISpanContext Extract<TCarrier>(global::OpenTracing.Propagation.IFormat<TCarrier> format, TCarrier carrier)
-        {
-            if (format is null)
+            foreach (var entry in textMapCarrier)
             {
-                throw new ArgumentNullException(nameof(format), "Parameter cannot be null");
+                carrierMap.Add(entry.Key, new[] { entry.Value });
             }
 
-            if (carrier == null)
+            static IEnumerable<string> GetCarrierKeyValue(Dictionary<string, IEnumerable<string>> source, string key)
             {
-                throw new ArgumentNullException(nameof(carrier), "Parameter cannot be null");
-            }
-
-            PropagationContext propagationContext = default;
-
-            if ((format == BuiltinFormats.TextMap || format == BuiltinFormats.HttpHeaders) && carrier is ITextMap textMapCarrier)
-            {
-                var carrierMap = new Dictionary<string, IEnumerable<string>>();
-
-                foreach (var entry in textMapCarrier)
+                if (key == null || !source.TryGetValue(key, out var value))
                 {
-                    carrierMap.Add(entry.Key, new[] { entry.Value });
+                    return null;
                 }
 
-                static IEnumerable<string> GetCarrierKeyValue(Dictionary<string, IEnumerable<string>> source, string key)
-                {
-                    if (key == null || !source.TryGetValue(key, out var value))
-                    {
-                        return null;
-                    }
-
-                    return value;
-                }
-
-                propagationContext = this.propagator.Extract(propagationContext, carrierMap, GetCarrierKeyValue);
+                return value;
             }
 
-            // TODO:
-            //  Not sure what to do here. Really, Baggage should be returned and not set until this ISpanContext is turned into a live Span.
-            //  But that code doesn't seem to exist.
-            // Baggage.Current = propagationContext.Baggage;
-
-            return !propagationContext.ActivityContext.IsValid() ? null : new SpanContextShim(new Trace.SpanContext(propagationContext.ActivityContext));
+            propagationContext = this.propagator.Extract(propagationContext, carrierMap, GetCarrierKeyValue);
         }
 
-        /// <inheritdoc/>
-        public void Inject<TCarrier>(
-            global::OpenTracing.ISpanContext spanContext,
-            global::OpenTracing.Propagation.IFormat<TCarrier> format,
-            TCarrier carrier)
+        // TODO:
+        //  Not sure what to do here. Really, Baggage should be returned and not set until this ISpanContext is turned into a live Span.
+        //  But that code doesn't seem to exist.
+        // Baggage.Current = propagationContext.Baggage;
+
+        return !propagationContext.ActivityContext.IsValid() ? null : new SpanContextShim(new Trace.SpanContext(propagationContext.ActivityContext));
+    }
+
+    /// <inheritdoc/>
+    public void Inject<TCarrier>(
+        global::OpenTracing.ISpanContext spanContext,
+        IFormat<TCarrier> format,
+        TCarrier carrier)
+    {
+        Guard.ThrowIfNull(spanContext);
+        var shim = Guard.ThrowIfNotOfType<SpanContextShim>(spanContext);
+        Guard.ThrowIfNull(format);
+        Guard.ThrowIfNull(carrier);
+
+        if ((format == BuiltinFormats.TextMap || format == BuiltinFormats.HttpHeaders) && carrier is ITextMap textMapCarrier)
         {
-            if (spanContext is null)
-            {
-                throw new ArgumentNullException(nameof(spanContext), "Parameter cannot be null");
-            }
-
-            if (!(spanContext is SpanContextShim shim))
-            {
-                throw new ArgumentException("Context is not a valid SpanContextShim object", nameof(shim));
-            }
-
-            if (format is null)
-            {
-                throw new ArgumentNullException(nameof(format), "Parameter cannot be null");
-            }
-
-            if (carrier == null)
-            {
-                throw new ArgumentNullException(nameof(carrier), "Parameter cannot be null");
-            }
-
-            if ((format == BuiltinFormats.TextMap || format == BuiltinFormats.HttpHeaders) && carrier is ITextMap textMapCarrier)
-            {
-                this.propagator.Inject(
-                    new PropagationContext(shim.SpanContext, Baggage.Current),
-                    textMapCarrier,
-                    (instrumentation, key, value) => instrumentation.Set(key, value));
-            }
+            this.propagator.Inject(
+                new PropagationContext(shim.SpanContext, Baggage.Current),
+                textMapCarrier,
+                (instrumentation, key, value) => instrumentation.Set(key, value));
         }
     }
 }

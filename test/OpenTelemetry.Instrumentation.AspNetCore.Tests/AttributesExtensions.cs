@@ -14,16 +14,12 @@
 // limitations under the License.
 // </copyright>
 
-using System.Collections.Generic;
-using System.Linq;
+namespace OpenTelemetry.Instrumentation.AspNetCore.Tests;
 
-namespace OpenTelemetry.Instrumentation.AspNetCore.Tests
+internal static class AttributesExtensions
 {
-    internal static class AttributesExtensions
+    public static object GetValue(this IEnumerable<KeyValuePair<string, object>> attributes, string key)
     {
-        public static object GetValue(this IEnumerable<KeyValuePair<string, object>> attributes, string key)
-        {
-            return attributes.FirstOrDefault(kvp => kvp.Key == key).Value;
-        }
+        return attributes.FirstOrDefault(kvp => kvp.Key == key).Value;
     }
 }

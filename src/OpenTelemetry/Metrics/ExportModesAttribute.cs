@@ -14,20 +14,17 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+namespace OpenTelemetry.Metrics;
 
-namespace OpenTelemetry.Metrics
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
+public sealed class ExportModesAttribute : Attribute
 {
-    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
-    public sealed class ExportModesAttribute : Attribute
+    private readonly ExportModes supportedExportModes;
+
+    public ExportModesAttribute(ExportModes supported)
     {
-        private ExportModes supportedExportModes;
-
-        public ExportModesAttribute(ExportModes supported)
-        {
-            this.supportedExportModes = supported;
-        }
-
-        public ExportModes Supported => this.supportedExportModes;
+        this.supportedExportModes = supported;
     }
+
+    public ExportModes Supported => this.supportedExportModes;
 }

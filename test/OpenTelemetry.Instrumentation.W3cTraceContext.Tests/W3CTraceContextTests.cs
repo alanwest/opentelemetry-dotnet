@@ -15,86 +15,148 @@
 // </copyright>
 
 using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Mvc;
 using OpenTelemetry.Tests;
+using OpenTelemetry.Trace;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace OpenTelemetry.Instrumentation.W3cTraceContext.Tests
+namespace OpenTelemetry.Instrumentation.W3cTraceContext.Tests;
+
+public class W3CTraceContextTests : IDisposable
 {
-    public class W3CTraceContextTests
+    /*
+        To run the tests, invoke docker-compose.yml from the root of the repo:
+        opentelemetry>docker-compose --file=test/OpenTelemetry.Instrumentation.W3cTraceContext.Tests/docker-compose.yml --project-directory=. up --exit-code-from=tests --build
+     */
+    private const string W3cTraceContextEnvVarName = "OTEL_W3CTRACECONTEXT";
+    private static readonly Version AspNetCoreHostingVersion = typeof(Microsoft.AspNetCore.Hosting.Builder.IApplicationBuilderFactory).Assembly.GetName().Version;
+    private readonly HttpClient httpClient = new HttpClient();
+    private readonly ITestOutputHelper output;
+
+    public W3CTraceContextTests(ITestOutputHelper output)
     {
-        /*
-            To run the tests, invoke docker-compose.yml from the root of the repo:
-            opentelemetry>docker-compose --file=test/OpenTelemetry.Instrumentation.W3cTraceContext.Tests/docker-compose.yml --project-directory=. up --exit-code-from=tests --build
-         */
+        this.output = output;
+    }
 
-        private const string W3cTraceContextEnvVarName = "OTEL_W3CTRACECONTEXT";
-        private readonly ITestOutputHelper output;
+    [Trait("CategoryName", "W3CTraceContextTests")]
+    [SkipUnlessEnvVarFoundTheory(W3cTraceContextEnvVarName)]
+    [InlineData("placeholder")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "xUnit1026:Theory methods should use all of their parameters", Justification = "Need to use SkipUnlessEnvVarFoundTheory")]
+    public void W3CTraceContextTestSuiteAsync(string value)
+    {
+        // configure SDK
+        using var tracerprovider = Sdk.CreateTracerProviderBuilder()
+        .AddAspNetCoreInstrumentation()
+        .Build();
 
-        public W3CTraceContextTests(ITestOutputHelper output)
+        var builder = WebApplication.CreateBuilder();
+        using var app = builder.Build();
+
+        // disabling due to failing dotnet-format
+        // TODO: investigate why dotnet-format fails.
+#pragma warning disable SA1008 // Opening parenthesis should be spaced correctly
+        app.MapPost("/", async([FromBody] Data[] data) =>
         {
-            this.output = output;
-        }
-
-        [Trait("CategoryName", "W3CTraceContextTests")]
-        [SkipUnlessEnvVarFoundTheory(W3cTraceContextEnvVarName)]
-        [InlineData("placeholder")]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "xUnit1026:Theory methods should use all of their parameters", Justification = "Need to use SkipUnlessEnvVarFoundTheory")]
-        public void W3CTraceContextTestSuite(string value)
-        {
-            // Arrange
-            using (var server = new InProcessServer(this.output))
+            var result = string.Empty;
+            if (data != null)
             {
-                // Act
-                // Run Python script in test folder of W3C Trace Context repository
-                string result = RunCommand("python", "trace-context/test/test.py http://127.0.0.1:5000/api/forward");
-
-                // Assert
-                // Assert on the last line
-                // TODO: fix W3C Trace Context test suite
-                // ASP NET Core 2.1: FAILED (failures=1)
-                // ASP NET Core 3.1: FAILED (failures=3)
-                // ASP NET Core 5.0: FAILED (failures=3)
-                string lastLine = ParseLastLine(result);
-                this.output.WriteLine("result:" + result);
-                Assert.StartsWith("FAILED", lastLine);
-            }
-        }
-
-        private static string RunCommand(string command, string args)
-        {
-            var proc = new Process
-            {
-                StartInfo = new ProcessStartInfo
+                foreach (var argument in data)
                 {
-                    FileName = command,
-                    Arguments = $" {args}",
-                    UseShellExecute = false,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
-                    CreateNoWindow = true,
-                    WorkingDirectory = ".",
-                },
-            };
-            proc.Start();
-
-            // TODO: after W3C Trace Context test suite passes, it might go in standard output
-            // var results = proc.StandardOutput.ReadToEnd();
-            var results = proc.StandardError.ReadToEnd();
-            proc.WaitForExit();
-            return results;
-        }
-
-        private static string ParseLastLine(string output)
-        {
-            if (output.Length <= 1)
+                    using var request = new HttpRequestMessage(HttpMethod.Post, argument.Url)
+                    {
+                        Content = new StringContent(
+                            JsonSerializer.Serialize(argument.Arguments),
+                            Encoding.UTF8,
+                            "application/json"),
+                    };
+                    await this.httpClient.SendAsync(request).ConfigureAwait(false);
+                }
+            }
+            else
             {
-                return output;
+                result = "done";
             }
 
-            // The output ends with '\n', which should be ignored.
-            var lastNewLineCharacterPos = output.LastIndexOf('\n', output.Length - 2);
-            return output.Substring(lastNewLineCharacterPos + 1);
+            return result;
+        });
+#pragma warning restore SA1008 // Opening parenthesis should be spaced correctly
+
+        app.RunAsync();
+
+        string result = RunCommand("python", "trace-context/test/test.py http://localhost:5000/");
+
+        // Assert
+        string lastLine = ParseLastLine(result);
+
+        this.output.WriteLine("result:" + result);
+
+        // Assert on the last line
+
+        // TODO: Investigate failures on .NET6 vs .NET7. To see the details
+        // run the tests with console logger (done automatically by the CI
+        // jobs).
+
+        if (AspNetCoreHostingVersion.Major <= 6)
+        {
+            Assert.StartsWith("FAILED (failures=5)", lastLine);
         }
+        else
+        {
+            Assert.StartsWith("FAILED (failures=3)", lastLine);
+        }
+    }
+
+    public void Dispose()
+    {
+        this.httpClient.Dispose();
+    }
+
+    private static string RunCommand(string command, string args)
+    {
+        using var proc = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = command,
+                Arguments = $" {args}",
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true,
+                WorkingDirectory = ".",
+            },
+        };
+        proc.Start();
+
+        // TODO: after W3C Trace Context test suite passes, it might go in standard output
+        var results = proc.StandardError.ReadToEnd();
+        proc.WaitForExit();
+        return results;
+    }
+
+    private static string ParseLastLine(string output)
+    {
+        if (output.Length <= 1)
+        {
+            return output;
+        }
+
+        // The output ends with '\n', which should be ignored.
+        var lastNewLineCharacterPos = output.LastIndexOf('\n', output.Length - 2);
+        return output.Substring(lastNewLineCharacterPos + 1);
+    }
+
+    public class Data
+    {
+        [JsonPropertyName("url")]
+        public string Url { get; set; }
+
+        [JsonPropertyName("arguments")]
+        public Data[] Arguments { get; set; }
     }
 }

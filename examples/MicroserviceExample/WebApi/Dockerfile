@@ -1,10 +1,12 @@
-FROM mcr.microsoft.com/dotnet/core/sdk:3.1-alpine AS build
-
+ARG SDK_VERSION=7.0
+FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION} AS build
+ARG PUBLISH_CONFIGURATION=Release
+ARG PUBLISH_FRAMEWORK=net7.0
 WORKDIR /app
 COPY . ./
-RUN dotnet publish ./examples/MicroserviceExample/WebApi -c Release -o /out -p:IntegrationBuild=true
+RUN dotnet publish ./examples/MicroserviceExample/WebApi -c "${PUBLISH_CONFIGURATION}" -f "${PUBLISH_FRAMEWORK}" -o /out -p:IntegrationBuild=true
 
-FROM mcr.microsoft.com/dotnet/core/aspnet:3.1-alpine AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:${SDK_VERSION} AS runtime
 WORKDIR /app
 COPY --from=build /out ./
 ENTRYPOINT ["dotnet", "WebApi.dll"]

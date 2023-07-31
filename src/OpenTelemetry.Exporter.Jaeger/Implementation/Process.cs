@@ -14,105 +14,81 @@
 // limitations under the License.
 // </copyright>
 
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using Thrift.Protocol;
 using Thrift.Protocol.Entities;
 
-namespace OpenTelemetry.Exporter.Jaeger.Implementation
+namespace OpenTelemetry.Exporter.Jaeger.Implementation;
+
+internal sealed class Process
 {
-    internal class Process
+    public string ServiceName { get; set; }
+
+    public Dictionary<string, JaegerTag> Tags { get; set; }
+
+    public override string ToString()
     {
-        public Process(string serviceName)
+        var sb = new StringBuilder("Process(");
+        sb.Append(", ServiceName: ");
+        sb.Append(this.ServiceName);
+
+        if (this.Tags != null)
         {
-            this.ServiceName = serviceName;
+            sb.Append(", Tags: ");
+            sb.Append(this.Tags);
         }
 
-        public Process(string serviceName, IEnumerable<KeyValuePair<string, object>> processTags)
-            : this(serviceName, processTags?.Select(pt => pt.ToJaegerTag()).ToDictionary(pt => pt.Key, pt => pt))
-        {
-        }
+        sb.Append(')');
+        return sb.ToString();
+    }
 
-        internal Process(string serviceName, Dictionary<string, JaegerTag> processTags)
-            : this(serviceName)
+    public void Write(TProtocol oprot)
+    {
+        oprot.IncrementRecursionDepth();
+
+        try
         {
-            if (processTags != null)
+            var struc = new TStruct("Process");
+            oprot.WriteStructBegin(struc);
+
+            var field = new TField
             {
-                this.Tags = processTags;
-            }
-        }
+                Name = "serviceName",
+                Type = TType.String,
+                ID = 1,
+            };
 
-        public string ServiceName { get; internal set; }
-
-        internal Dictionary<string, JaegerTag> Tags { get; set; }
-
-        internal byte[] Message { get; set; }
-
-        public override string ToString()
-        {
-            var sb = new StringBuilder("Process(");
-            sb.Append(", ServiceName: ");
-            sb.Append(this.ServiceName);
+            oprot.WriteFieldBegin(field);
+            oprot.WriteString(this.ServiceName);
+            oprot.WriteFieldEnd();
 
             if (this.Tags != null)
             {
-                sb.Append(", Tags: ");
-                sb.Append(this.Tags);
-            }
-
-            sb.Append(')');
-            return sb.ToString();
-        }
-
-        internal void Write(TProtocol oprot)
-        {
-            oprot.IncrementRecursionDepth();
-
-            try
-            {
-                var struc = new TStruct("Process");
-                oprot.WriteStructBegin(struc);
-
-                var field = new TField
-                {
-                    Name = "serviceName",
-                    Type = TType.String,
-                    ID = 1,
-                };
+                field.Name = "tags";
+                field.Type = TType.List;
+                field.ID = 2;
 
                 oprot.WriteFieldBegin(field);
-                oprot.WriteString(this.ServiceName);
-                oprot.WriteFieldEnd();
-
-                if (this.Tags != null)
                 {
-                    field.Name = "tags";
-                    field.Type = TType.List;
-                    field.ID = 2;
+                    oprot.WriteListBegin(new TList(TType.Struct, this.Tags.Count));
 
-                    oprot.WriteFieldBegin(field);
+                    foreach (var jt in this.Tags)
                     {
-                        oprot.WriteListBegin(new TList(TType.Struct, this.Tags.Count));
-
-                        foreach (var jt in this.Tags)
-                        {
-                            jt.Value.Write(oprot);
-                        }
-
-                        oprot.WriteListEnd();
+                        jt.Value.Write(oprot);
                     }
 
-                    oprot.WriteFieldEnd();
+                    oprot.WriteListEnd();
                 }
 
-                oprot.WriteFieldStop();
-                oprot.WriteStructEnd();
+                oprot.WriteFieldEnd();
             }
-            finally
-            {
-                oprot.DecrementRecursionDepth();
-            }
+
+            oprot.WriteFieldStop();
+            oprot.WriteStructEnd();
+        }
+        finally
+        {
+            oprot.DecrementRecursionDepth();
         }
     }
 }

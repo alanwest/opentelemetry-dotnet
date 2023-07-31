@@ -14,211 +14,274 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using OpenTelemetry.Exporter.Jaeger.Implementation;
+using OpenTelemetry.Internal;
 using OpenTelemetry.Resources;
 using Thrift.Protocol;
-using Thrift.Transport;
 using Process = OpenTelemetry.Exporter.Jaeger.Implementation.Process;
 
-namespace OpenTelemetry.Exporter
+namespace OpenTelemetry.Exporter;
+
+public class JaegerExporter : BaseExporter<Activity>
 {
-    public class JaegerExporter : BaseExporter<Activity>
+    internal uint NumberOfSpansInCurrentBatch;
+
+    private readonly byte[] uInt32Storage = new byte[8];
+    private readonly int maxPayloadSizeInBytes;
+    private readonly IJaegerClient client;
+    private readonly TProtocol batchWriter;
+    private readonly TProtocol spanWriter;
+    private readonly bool sendUsingEmitBatchArgs;
+    private int minimumBatchSizeInBytes;
+    private int currentBatchSizeInBytes;
+    private int spanStartPosition;
+    private uint sequenceId;
+    private bool disposed;
+
+    public JaegerExporter(JaegerExporterOptions options)
+        : this(options, null)
     {
-        private readonly int maxPayloadSizeInBytes;
-        private readonly TProtocolFactory protocolFactory;
-        private readonly TTransport clientTransport;
-        private readonly JaegerThriftClient thriftClient;
-        private readonly InMemoryTransport memoryTransport;
-        private readonly TProtocol memoryProtocol;
-        private int batchByteSize;
-        private bool disposedValue; // To detect redundant dispose calls
+    }
 
-        public JaegerExporter(JaegerExporterOptions options)
-            : this(options, null)
+    internal JaegerExporter(JaegerExporterOptions options, TProtocolFactory protocolFactory = null, IJaegerClient client = null)
+    {
+        Guard.ThrowIfNull(options);
+
+        this.maxPayloadSizeInBytes = (!options.MaxPayloadSizeInBytes.HasValue || options.MaxPayloadSizeInBytes <= 0)
+            ? JaegerExporterOptions.DefaultMaxPayloadSizeInBytes
+            : options.MaxPayloadSizeInBytes.Value;
+
+        if (options.Protocol == JaegerExportProtocol.UdpCompactThrift)
         {
+            protocolFactory ??= new TCompactProtocol.Factory();
+            client ??= new JaegerUdpClient(options.AgentHost, options.AgentPort);
+            this.sendUsingEmitBatchArgs = true;
+        }
+        else if (options.Protocol == JaegerExportProtocol.HttpBinaryThrift)
+        {
+            protocolFactory ??= new TBinaryProtocol.Factory();
+            client ??= new JaegerHttpClient(
+                options.Endpoint,
+                options.HttpClientFactory?.Invoke() ?? throw new InvalidOperationException("JaegerExporterOptions was missing HttpClientFactory or it returned null."));
+        }
+        else
+        {
+            throw new NotSupportedException();
         }
 
-        internal JaegerExporter(JaegerExporterOptions options, TTransport clientTransport = null)
+        JaegerTagTransformer.LogUnsupportedAttributeType = (string tagValueType, string tagKey) =>
         {
-            if (options is null)
+            JaegerExporterEventSource.Log.UnsupportedAttributeType(tagValueType, tagKey);
+        };
+
+        ConfigurationExtensions.LogInvalidEnvironmentVariable = (string key, string value) =>
+        {
+            JaegerExporterEventSource.Log.InvalidEnvironmentVariable(key, value);
+        };
+
+        this.client = client;
+        this.batchWriter = protocolFactory.GetProtocol(this.maxPayloadSizeInBytes * 2);
+        this.spanWriter = protocolFactory.GetProtocol(this.maxPayloadSizeInBytes);
+
+        this.Process = new();
+
+        client.Connect();
+    }
+
+    internal Process Process { get; }
+
+    internal EmitBatchArgs EmitBatchArgs { get; private set; }
+
+    internal Batch Batch { get; private set; }
+
+    /// <inheritdoc/>
+    public override ExportResult Export(in Batch<Activity> activityBatch)
+    {
+        try
+        {
+            if (this.Batch == null)
             {
-                throw new ArgumentNullException(nameof(options));
+                this.SetResourceAndInitializeBatch(this.ParentProvider.GetResource());
             }
 
-            this.maxPayloadSizeInBytes = (!options.MaxPayloadSizeInBytes.HasValue || options.MaxPayloadSizeInBytes <= 0) ? JaegerExporterOptions.DefaultMaxPayloadSizeInBytes : options.MaxPayloadSizeInBytes.Value;
-            this.protocolFactory = new TCompactProtocol.Factory();
-            this.clientTransport = clientTransport ?? new JaegerThriftClientTransport(options.AgentHost, options.AgentPort);
-            this.thriftClient = new JaegerThriftClient(this.protocolFactory.GetProtocol(this.clientTransport));
-            this.memoryTransport = new InMemoryTransport(16000);
-            this.memoryProtocol = this.protocolFactory.GetProtocol(this.memoryTransport);
+            foreach (var activity in activityBatch)
+            {
+                var jaegerSpan = activity.ToJaegerSpan();
+                this.AppendSpan(jaegerSpan);
+                jaegerSpan.Return();
+            }
 
-            string serviceName = (string)this.ParentProvider.GetDefaultResource().Attributes.Where(
-                    pair => pair.Key == ResourceSemanticConventions.AttributeServiceName).FirstOrDefault().Value;
-            this.Process = new Process(serviceName);
+            this.SendCurrentBatch();
+
+            return ExportResult.Success;
         }
-
-        internal Process Process { get; set; }
-
-        internal Batch Batch { get; private set; }
-
-        /// <inheritdoc/>
-        public override ExportResult Export(in Batch<Activity> activityBatch)
+        catch (Exception ex)
         {
-            try
-            {
-                if (this.Batch == null)
-                {
-                    this.SetResourceAndInitializeBatch(this.ParentProvider.GetResource());
-                }
+            JaegerExporterEventSource.Log.FailedExport(ex);
 
-                foreach (var activity in activityBatch)
-                {
-                    this.AppendSpan(activity.ToJaegerSpan());
-                }
-
-                this.SendCurrentBatch();
-
-                return ExportResult.Success;
-            }
-            catch (Exception ex)
-            {
-                JaegerExporterEventSource.Log.FailedExport(ex);
-
-                return ExportResult.Failure;
-            }
+            return ExportResult.Failure;
         }
+    }
 
-        internal void SetResourceAndInitializeBatch(Resource resource)
+    internal void SetResourceAndInitializeBatch(Resource resource)
+    {
+        Guard.ThrowIfNull(resource);
+
+        var process = this.Process;
+
+        string serviceName = null;
+        string serviceNamespace = null;
+        foreach (var label in resource.Attributes)
         {
-            if (resource is null)
+            string key = label.Key;
+
+            if (label.Value is string strVal)
             {
-                throw new ArgumentNullException(nameof(resource));
+                switch (key)
+                {
+                    case ResourceSemanticConventions.AttributeServiceName:
+                        serviceName = strVal;
+                        continue;
+                    case ResourceSemanticConventions.AttributeServiceNamespace:
+                        serviceNamespace = strVal;
+                        continue;
+                }
             }
 
-            var process = this.Process;
-
-            string serviceName = null;
-            string serviceNamespace = null;
-            foreach (var label in resource.Attributes)
+            if (JaegerTagTransformer.Instance.TryTransformTag(label, out var result))
             {
-                string key = label.Key;
-
-                if (label.Value is string strVal)
-                {
-                    switch (key)
-                    {
-                        case ResourceSemanticConventions.AttributeServiceName:
-                            serviceName = strVal;
-                            continue;
-                        case ResourceSemanticConventions.AttributeServiceNamespace:
-                            serviceNamespace = strVal;
-                            continue;
-                    }
-                }
-
                 if (process.Tags == null)
                 {
                     process.Tags = new Dictionary<string, JaegerTag>();
                 }
 
-                process.Tags[key] = label.ToJaegerTag();
+                process.Tags[key] = result;
             }
-
-            if (serviceName != null)
-            {
-                serviceName = string.IsNullOrEmpty(serviceNamespace)
-                    ? serviceName
-                    : serviceNamespace + "." + serviceName;
-            }
-
-            if (!string.IsNullOrEmpty(serviceName))
-            {
-                process.ServiceName = serviceName;
-            }
-
-            this.Process.Message = this.BuildThriftMessage(this.Process).ToArray();
-            this.Batch = new Batch(this.Process);
-            this.batchByteSize = this.Process.Message.Length;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void AppendSpan(JaegerSpan jaegerSpan)
+        if (!string.IsNullOrWhiteSpace(serviceName))
         {
-            var spanMessage = this.BuildThriftMessage(jaegerSpan);
+            serviceName = string.IsNullOrEmpty(serviceNamespace)
+                ? serviceName
+                : serviceNamespace + "." + serviceName;
+        }
+        else
+        {
+            serviceName = (string)this.ParentProvider.GetDefaultResource().Attributes.FirstOrDefault(
+                pair => pair.Key == ResourceSemanticConventions.AttributeServiceName).Value;
+        }
 
-            jaegerSpan.Return();
+        process.ServiceName = serviceName;
 
-            var spanTotalBytesNeeded = spanMessage.Count;
+        this.Batch = new Batch(process, this.batchWriter);
+        if (this.sendUsingEmitBatchArgs)
+        {
+            this.EmitBatchArgs = new EmitBatchArgs(this.batchWriter);
+            this.Batch.SpanCountPosition += this.EmitBatchArgs.EmitBatchArgsBeginMessage.Length;
+            this.batchWriter.WriteRaw(this.EmitBatchArgs.EmitBatchArgsBeginMessage);
+        }
 
-            if (this.batchByteSize + spanTotalBytesNeeded >= this.maxPayloadSizeInBytes)
+        this.batchWriter.WriteRaw(this.Batch.BatchBeginMessage);
+        this.spanStartPosition = this.batchWriter.Position;
+
+        this.minimumBatchSizeInBytes = this.EmitBatchArgs?.MinimumMessageSize ?? 0
+            + this.Batch.MinimumMessageSize;
+
+        this.ResetBatch();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void AppendSpan(JaegerSpan jaegerSpan)
+    {
+        jaegerSpan.Write(this.spanWriter);
+        try
+        {
+            var spanTotalBytesNeeded = this.spanWriter.Length;
+
+            if (this.NumberOfSpansInCurrentBatch > 0
+                && this.currentBatchSizeInBytes + spanTotalBytesNeeded >= this.maxPayloadSizeInBytes)
             {
                 this.SendCurrentBatch();
-
-                // SendCurrentBatch clears/invalidates the BufferWriter in InMemoryTransport.
-                // The new spanMessage is still located in it, though. It might get overwritten later
-                // when spans are written in the buffer for the next batch.
-                // Move spanMessage to the beginning of the BufferWriter to avoid data corruption.
-                this.memoryTransport.Write(spanMessage.BufferWriter.Buffer, spanMessage.Offset, spanMessage.Count);
-                spanMessage = this.memoryTransport.ToBuffer();
             }
 
-            this.Batch.Add(spanMessage);
-            this.batchByteSize += spanTotalBytesNeeded;
-        }
+            var spanData = this.spanWriter.WrittenData;
+            this.batchWriter.WriteRaw(spanData);
 
-        /// <inheritdoc/>
-        protected override void Dispose(bool disposing)
+            this.NumberOfSpansInCurrentBatch++;
+            this.currentBatchSizeInBytes += spanTotalBytesNeeded;
+        }
+        finally
         {
-            if (!this.disposedValue)
+            this.spanWriter.Clear();
+        }
+    }
+
+    internal void SendCurrentBatch()
+    {
+        try
+        {
+            this.batchWriter.WriteRaw(this.Batch.BatchEndMessage);
+
+            if (this.sendUsingEmitBatchArgs)
             {
-                if (disposing)
+                this.batchWriter.WriteRaw(this.EmitBatchArgs.EmitBatchArgsEndMessage);
+
+                this.WriteUInt32AtPosition(this.EmitBatchArgs.SeqIdPosition, ++this.sequenceId);
+            }
+
+            this.WriteUInt32AtPosition(this.Batch.SpanCountPosition, this.NumberOfSpansInCurrentBatch);
+
+            var writtenData = this.batchWriter.WrittenData;
+
+            this.client.Send(writtenData.Array, writtenData.Offset, writtenData.Count);
+        }
+        finally
+        {
+            this.ResetBatch();
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (!this.disposed)
+        {
+            if (disposing)
+            {
+                try
                 {
-                    this.thriftClient.Dispose();
-                    this.clientTransport.Dispose();
-                    this.memoryTransport.Dispose();
-                    this.memoryProtocol.Dispose();
+                    this.client.Close();
+                }
+                catch
+                {
                 }
 
-                this.disposedValue = true;
+                this.client.Dispose();
+                this.batchWriter.Dispose();
+                this.spanWriter.Dispose();
             }
 
-            base.Dispose(disposing);
+            this.disposed = true;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void SendCurrentBatch()
-        {
-            try
-            {
-                this.thriftClient.SendBatch(this.Batch);
-            }
-            finally
-            {
-                this.Batch.Clear();
-                this.batchByteSize = this.Process.Message.Length;
-                this.memoryTransport.Reset();
-            }
-        }
+        base.Dispose(disposing);
+    }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private BufferWriterMemory BuildThriftMessage(Process process)
-        {
-            process.Write(this.memoryProtocol);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void WriteUInt32AtPosition(int position, uint value)
+    {
+        this.batchWriter.Position = position;
+        int numberOfBytes = this.batchWriter.WriteUI32(value, this.uInt32Storage);
+        this.batchWriter.WriteRaw(this.uInt32Storage, 0, numberOfBytes);
+    }
 
-            return this.memoryTransport.ToBuffer();
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private BufferWriterMemory BuildThriftMessage(in JaegerSpan jaegerSpan)
-        {
-            jaegerSpan.Write(this.memoryProtocol);
-
-            return this.memoryTransport.ToBuffer();
-        }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ResetBatch()
+    {
+        this.currentBatchSizeInBytes = this.minimumBatchSizeInBytes;
+        this.NumberOfSpansInCurrentBatch = 0;
+        this.batchWriter.Clear(this.spanStartPosition);
     }
 }

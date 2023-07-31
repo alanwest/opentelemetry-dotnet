@@ -14,43 +14,25 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Trace
+namespace OpenTelemetry.Trace;
+
+public static class InMemoryExporterHelperExtensions
 {
-    public static class InMemoryExporterHelperExtensions
+    /// <summary>
+    /// Adds InMemory exporter to the TracerProvider.
+    /// </summary>
+    /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
+    /// <param name="exportedItems">Collection which will be populated with the exported <see cref="Activity"/>.</param>
+    /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
+    public static TracerProviderBuilder AddInMemoryExporter(this TracerProviderBuilder builder, ICollection<Activity> exportedItems)
     {
-        /// <summary>
-        /// Adds InMemory exporter to the TracerProvider.
-        /// </summary>
-        /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
-        /// <param name="exportedItems">Collection which will be populated with the exported Activity.</param>
-        /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The objects should not be disposed.")]
-        public static TracerProviderBuilder AddInMemoryExporter(this TracerProviderBuilder builder, ICollection<Activity> exportedItems)
-        {
-            if (builder == null)
-            {
-                throw new ArgumentNullException(nameof(builder));
-            }
+        Guard.ThrowIfNull(builder);
+        Guard.ThrowIfNull(exportedItems);
 
-            if (exportedItems == null)
-            {
-                throw new ArgumentNullException(nameof(exportedItems));
-            }
-
-            if (builder is IDeferredTracerProviderBuilder deferredTracerProviderBuilder)
-            {
-                return deferredTracerProviderBuilder.Configure((sp, builder) =>
-                {
-                    builder.AddProcessor(new SimpleActivityExportProcessor(new InMemoryExporter<Activity>(exportedItems)));
-                });
-            }
-
-            return builder.AddProcessor(new SimpleActivityExportProcessor(new InMemoryExporter<Activity>(exportedItems)));
-        }
+        return builder.AddProcessor(new SimpleActivityExportProcessor(new InMemoryExporter<Activity>(exportedItems)));
     }
 }

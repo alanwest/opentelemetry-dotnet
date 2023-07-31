@@ -8,9 +8,12 @@ receivers:
   otlp:
     protocols:
       grpc:
+        endpoint: 0.0.0.0:4317
         tls_settings:
           cert_file: /cfg/otel-collector.crt
           key_file: /cfg/otel-collector.key
+      http:
+        endpoint: 0.0.0.0:4318
 
 exporters:
   logging:
@@ -19,5 +22,8 @@ exporters:
 service:
   pipelines:
     traces:
+      receivers: [otlp]
+      exporters: [logging]
+    metrics:
       receivers: [otlp]
       exporters: [logging]

@@ -14,40 +14,39 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Diagnostics;
 using Xunit;
 
-namespace OpenTelemetry.Trace.Tests
+namespace OpenTelemetry.Trace.Tests;
+
+public class CurrentSpanTests : IDisposable
 {
-    public class CurrentSpanTests : IDisposable
+    private readonly Tracer tracer;
+
+    public CurrentSpanTests()
     {
-        private readonly Tracer tracer;
+        Activity.DefaultIdFormat = ActivityIdFormat.W3C;
+        Activity.ForceDefaultIdFormat = true;
 
-        public CurrentSpanTests()
-        {
-            Activity.DefaultIdFormat = ActivityIdFormat.W3C;
-            Activity.ForceDefaultIdFormat = true;
+        this.tracer = TracerProvider.Default.GetTracer(null);
+    }
 
-            this.tracer = TracerProvider.Default.GetTracer(null);
-        }
+    [Fact]
+    public void CurrentSpan_WhenNoContext()
+    {
+        Assert.False(Tracer.CurrentSpan.Context.IsValid);
+    }
 
-        [Fact]
-        public void CurrentSpan_WhenNoContext()
-        {
-            Assert.False(Tracer.CurrentSpan.Context.IsValid);
-        }
+    [Fact]
+    public void CurrentSpan_WhenActivityExists()
+    {
+        using var activity = new Activity("foo").Start();
+        Assert.True(Tracer.CurrentSpan.Context.IsValid);
+    }
 
-        [Fact]
-        public void CurrentSpan_WhenActivityExists()
-        {
-            _ = new Activity("foo").Start();
-            Assert.True(Tracer.CurrentSpan.Context.IsValid);
-        }
-
-        public void Dispose()
-        {
-            Activity.Current = null;
-        }
+    public void Dispose()
+    {
+        Activity.Current = null;
+        GC.SuppressFinalize(this);
     }
 }

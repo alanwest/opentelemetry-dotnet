@@ -14,60 +14,82 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+#if NET6_0_OR_GREATER
+using System.Diagnostics.CodeAnalysis;
+#endif
 using System.Diagnostics.Tracing;
 using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Instrumentation.AspNetCore.Implementation
+namespace OpenTelemetry.Instrumentation.AspNetCore.Implementation;
+
+/// <summary>
+/// EventSource events emitted from the project.
+/// </summary>
+[EventSource(Name = "OpenTelemetry-Instrumentation-AspNetCore")]
+internal sealed class AspNetCoreInstrumentationEventSource : EventSource
 {
-    /// <summary>
-    /// EventSource events emitted from the project.
-    /// </summary>
-    [EventSource(Name = "OpenTelemetry-Instrumentation-AspNetCore")]
-    internal class AspNetCoreInstrumentationEventSource : EventSource
+    public static AspNetCoreInstrumentationEventSource Log = new();
+
+    [NonEvent]
+    public void RequestFilterException(string handlerName, string eventName, string operationName, Exception ex)
     {
-        public static AspNetCoreInstrumentationEventSource Log = new AspNetCoreInstrumentationEventSource();
-
-        [NonEvent]
-        public void RequestFilterException(Exception ex)
+        if (this.IsEnabled(EventLevel.Error, EventKeywords.All))
         {
-            if (this.IsEnabled(EventLevel.Error, EventKeywords.All))
-            {
-                this.RequestFilterException(ex.ToInvariantString());
-            }
+            this.RequestFilterException(handlerName, eventName, operationName, ex.ToInvariantString());
         }
+    }
 
-        [Event(1, Message = "Payload is NULL in event '{1}' from handler '{0}', span will not be recorded.", Level = EventLevel.Warning)]
-        public void NullPayload(string handlerName, string eventName)
+    [NonEvent]
+    public void EnrichmentException(string handlerName, string eventName, string operationName, Exception ex)
+    {
+        if (this.IsEnabled(EventLevel.Error, EventKeywords.All))
         {
-            this.WriteEvent(1, handlerName, eventName);
+            this.EnrichmentException(handlerName, eventName, operationName, ex.ToInvariantString());
         }
+    }
 
-        [Event(2, Message = "Request is filtered out.", Level = EventLevel.Verbose)]
-        public void RequestIsFilteredOut(string eventName)
+    [NonEvent]
+    public void UnknownErrorProcessingEvent(string handlerName, string eventName, Exception ex)
+    {
+        if (this.IsEnabled(EventLevel.Error, EventKeywords.All))
         {
-            this.WriteEvent(2, eventName);
+            this.UnknownErrorProcessingEvent(handlerName, eventName, ex.ToInvariantString());
         }
+    }
 
-        [Event(3, Message = "Filter threw exception. Request will not be collected. Exception {0}.", Level = EventLevel.Error)]
-        public void RequestFilterException(string exception)
-        {
-            this.WriteEvent(3, exception);
-        }
+    [Event(1, Message = "Payload is NULL, span will not be recorded. HandlerName: '{0}', EventName: '{1}', OperationName: '{2}'.", Level = EventLevel.Warning)]
+    public void NullPayload(string handlerName, string eventName, string operationName)
+    {
+        this.WriteEvent(1, handlerName, eventName, operationName);
+    }
 
-        [NonEvent]
-        public void EnrichmentException(Exception ex)
-        {
-            if (this.IsEnabled(EventLevel.Error, EventKeywords.All))
-            {
-                this.EnrichmentException(ex.ToInvariantString());
-            }
-        }
+    [Event(2, Message = "Request is filtered out. HandlerName: '{0}', EventName: '{1}', OperationName: '{2}'.", Level = EventLevel.Verbose)]
+    public void RequestIsFilteredOut(string handlerName, string eventName, string operationName)
+    {
+        this.WriteEvent(2, handlerName, eventName, operationName);
+    }
 
-        [Event(4, Message = "Enrich threw exception. Exception {0}.", Level = EventLevel.Error)]
-        public void EnrichmentException(string exception)
-        {
-            this.WriteEvent(4, exception);
-        }
+#if NET6_0_OR_GREATER
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "Parameters to this method are primitive and are trimmer safe.")]
+#endif
+    [Event(3, Message = "Filter threw exception, request will not be collected. HandlerName: '{0}', EventName: '{1}', OperationName: '{2}', Exception: {3}.", Level = EventLevel.Error)]
+    public void RequestFilterException(string handlerName, string eventName, string operationName, string exception)
+    {
+        this.WriteEvent(3, handlerName, eventName, operationName, exception);
+    }
+
+#if NET6_0_OR_GREATER
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "Parameters to this method are primitive and are trimmer safe.")]
+#endif
+    [Event(4, Message = "Enrich threw exception. HandlerName: '{0}', EventName: '{1}', OperationName: '{2}', Exception: {3}.", Level = EventLevel.Warning)]
+    public void EnrichmentException(string handlerName, string eventName, string operationName, string exception)
+    {
+        this.WriteEvent(4, handlerName, eventName, operationName, exception);
+    }
+
+    [Event(5, Message = "Unknown error processing event '{1}' from handler '{0}', Exception: {2}", Level = EventLevel.Error)]
+    public void UnknownErrorProcessingEvent(string handlerName, string eventName, string ex)
+    {
+        this.WriteEvent(5, handlerName, eventName, ex);
     }
 }

@@ -14,21 +14,18 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+namespace OpenTelemetry.Exporter;
 
-namespace OpenTelemetry.Exporter
+[Flags]
+public enum ConsoleExporterOutputTargets
 {
-    [Flags]
-    public enum ConsoleExporterOutputTargets
-    {
-        /// <summary>
-        /// Output to the Console (stdout).
-        /// </summary>
-        Console = 0b1,
+    /// <summary>
+    /// Output to the Console (stdout).
+    /// </summary>
+    Console = 0b1,
 
-        /// <summary>
-        /// Output to the Debug trace.
-        /// </summary>
-        Debug = 0b10,
-    }
+    /// <summary>
+    /// Output to the Debug trace.
+    /// </summary>
+    Debug = 0b10,
 }

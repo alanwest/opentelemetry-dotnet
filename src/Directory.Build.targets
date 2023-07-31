@@ -1,6 +1,6 @@
 <Project>
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="$(MicrosoftSourceLinkGitHubPkgVer)" Condition="'$(IntegrationBuild)' != 'true'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Condition="'$(IntegrationBuild)' != 'true'">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
@@ -11,5 +11,14 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedFiles Include="$(GeneratedAssemblyInfoFile)"/>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)'=='net462'">
+    <!--ImplicitUsings will add this namespace that is not available for NetFX.
+    https://github.com/dotnet/sdk/issues/24146
+    https://github.com/dotnet/runtime/issues/59163
+    https://github.com/dotnet/sdk/issues/22515
+    -->
+    <Using Remove="System.Net.Http" />
   </ItemGroup>
 </Project>

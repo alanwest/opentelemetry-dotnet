@@ -14,42 +14,58 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Trace
+namespace OpenTelemetry.Trace;
+
+public static class ConsoleExporterHelperExtensions
 {
-    public static class ConsoleExporterHelperExtensions
+    /// <summary>
+    /// Adds Console exporter to the TracerProvider.
+    /// </summary>
+    /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
+    /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
+    public static TracerProviderBuilder AddConsoleExporter(this TracerProviderBuilder builder)
+        => AddConsoleExporter(builder, name: null, configure: null);
+
+    /// <summary>
+    /// Adds Console exporter to the TracerProvider.
+    /// </summary>
+    /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
+    /// <param name="configure">Callback action for configuring <see cref="ConsoleExporterOptions"/>.</param>
+    /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
+    public static TracerProviderBuilder AddConsoleExporter(this TracerProviderBuilder builder, Action<ConsoleExporterOptions> configure)
+        => AddConsoleExporter(builder, name: null, configure);
+
+    /// <summary>
+    /// Adds Console exporter to the TracerProvider.
+    /// </summary>
+    /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
+    /// <param name="name">Name which is used when retrieving options.</param>
+    /// <param name="configure">Callback action for configuring <see cref="ConsoleExporterOptions"/>.</param>
+    /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
+    public static TracerProviderBuilder AddConsoleExporter(
+        this TracerProviderBuilder builder,
+        string name,
+        Action<ConsoleExporterOptions> configure)
     {
-        /// <summary>
-        /// Adds Console exporter to the TracerProvider.
-        /// </summary>
-        /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
-        /// <param name="configure">Exporter configuration options.</param>
-        /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The objects should not be disposed.")]
-        public static TracerProviderBuilder AddConsoleExporter(this TracerProviderBuilder builder, Action<ConsoleExporterOptions> configure = null)
+        Guard.ThrowIfNull(builder);
+
+        name ??= Options.DefaultName;
+
+        if (configure != null)
         {
-            if (builder == null)
-            {
-                throw new ArgumentNullException(nameof(builder));
-            }
-
-            if (builder is IDeferredTracerProviderBuilder deferredTracerProviderBuilder)
-            {
-                return deferredTracerProviderBuilder.Configure((sp, builder) =>
-                {
-                    AddConsoleExporter(builder, sp.GetOptions<ConsoleExporterOptions>(), configure);
-                });
-            }
-
-            return AddConsoleExporter(builder, new ConsoleExporterOptions(), configure);
+            builder.ConfigureServices(services => services.Configure(name, configure));
         }
 
-        private static TracerProviderBuilder AddConsoleExporter(TracerProviderBuilder builder, ConsoleExporterOptions options, Action<ConsoleExporterOptions> configure = null)
+        return builder.AddProcessor(sp =>
         {
-            configure?.Invoke(options);
-            return builder.AddProcessor(new SimpleActivityExportProcessor(new ConsoleActivityExporter(options)));
-        }
+            var options = sp.GetRequiredService<IOptionsMonitor<ConsoleExporterOptions>>().Get(name);
+
+            return new SimpleActivityExportProcessor(new ConsoleActivityExporter(options));
+        });
     }
 }

@@ -18,31 +18,29 @@ using System.Diagnostics;
 using BenchmarkDotNet.Attributes;
 using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Benchmarks
+namespace OpenTelemetry.Benchmarks;
+
+public class EventSourceBenchmarks
 {
-    [MemoryDiagnoser]
-    public class EventSourceBenchmarks
+    [Benchmark]
+    public void EventWithIdAllocation()
     {
-        [Benchmark]
-        public void EventWithIdAllocation()
-        {
-            Activity activity = new Activity("TestActivity");
-            activity.SetIdFormat(ActivityIdFormat.W3C);
-            activity.Start();
-            activity.Stop();
+        using var activity = new Activity("TestActivity");
+        activity.SetIdFormat(ActivityIdFormat.W3C);
+        activity.Start();
+        activity.Stop();
 
-            OpenTelemetrySdkEventSource.Log.ActivityStarted(activity.OperationName, activity.Id);
-        }
+        OpenTelemetrySdkEventSource.Log.ActivityStarted(activity.OperationName, activity.Id);
+    }
 
-        [Benchmark]
-        public void EventWithCheck()
-        {
-            Activity activity = new Activity("TestActivity");
-            activity.SetIdFormat(ActivityIdFormat.W3C);
-            activity.Start();
-            activity.Stop();
+    [Benchmark]
+    public void EventWithCheck()
+    {
+        using var activity = new Activity("TestActivity");
+        activity.SetIdFormat(ActivityIdFormat.W3C);
+        activity.Start();
+        activity.Stop();
 
-            OpenTelemetrySdkEventSource.Log.ActivityStarted(activity);
-        }
+        OpenTelemetrySdkEventSource.Log.ActivityStarted(activity);
     }
 }

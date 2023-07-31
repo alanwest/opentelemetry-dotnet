@@ -14,117 +14,113 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.Metrics;
-using System.Threading;
-using System.Threading.Tasks;
 using BenchmarkDotNet.Attributes;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Tests;
 
 /*
-BenchmarkDotNet=v0.12.1, OS=Windows 10.0.19043
-Intel Core i7-8650U CPU 1.90GHz (Kaby Lake R), 1 CPU, 8 logical and 4 physical cores
-.NET Core SDK=5.0.400
-  [Host]     : .NET Core 3.1.18 (CoreCLR 4.700.21.35901, CoreFX 4.700.21.36305), X64 RyuJIT
-  DefaultJob : .NET Core 3.1.18 (CoreCLR 4.700.21.35901, CoreFX 4.700.21.36305), X64 RyuJIT
+BenchmarkDotNet=v0.13.5, OS=Windows 11 (10.0.23424.1000)
+Intel Core i7-9700 CPU 3.00GHz, 1 CPU, 8 logical and 8 physical cores
+.NET SDK=7.0.203
+  [Host]     : .NET 7.0.5 (7.0.523.17405), X64 RyuJIT AVX2
+  DefaultJob : .NET 7.0.5 (7.0.523.17405), X64 RyuJIT AVX2
 
 
-|  Method | UseWithRef |     Mean |    Error |   StdDev | Gen 0 | Gen 1 | Gen 2 | Allocated |
-|-------- |----------- |---------:|---------:|---------:|------:|------:|------:|----------:|
-| Collect |      False | 51.38 us | 1.027 us | 1.261 us |     - |     - |     - |     136 B |
-| Collect |       True | 33.86 us | 0.716 us | 2.088 us |     - |     - |     - |     136 B |
+|  Method | UseWithRef |     Mean |    Error |   StdDev | Allocated |
+|-------- |----------- |---------:|---------:|---------:|----------:|
+| Collect |      False | 18.45 us | 0.161 us | 0.151 us |      96 B |
+| Collect |       True | 17.71 us | 0.347 us | 0.644 us |      96 B |
 */
 
-namespace Benchmarks.Metrics
+namespace Benchmarks.Metrics;
+
+public class MetricCollectBenchmarks
 {
-    [MemoryDiagnoser]
-    public class MetricCollectBenchmarks
+    private readonly string[] dimensionValues = new string[] { "DimVal1", "DimVal2", "DimVal3", "DimVal4", "DimVal5", "DimVal6", "DimVal7", "DimVal8", "DimVal9", "DimVal10" };
+
+    // TODO: Confirm if this needs to be thread-safe
+    private readonly Random random = new();
+    private Counter<double> counter;
+    private MeterProvider provider;
+    private Meter meter;
+    private CancellationTokenSource token;
+    private BaseExportingMetricReader reader;
+    private Task writeMetricTask;
+
+    [Params(false, true)]
+    public bool UseWithRef { get; set; }
+
+    [GlobalSetup]
+    public void Setup()
     {
-        private Counter<double> counter;
-        private MeterProvider provider;
-        private Meter meter;
-        private CancellationTokenSource token;
-        private BaseExportingMetricReader reader;
-        private Task writeMetricTask;
-        private string[] dimensionValues = new string[] { "DimVal1", "DimVal2", "DimVal3", "DimVal4", "DimVal5", "DimVal6", "DimVal7", "DimVal8", "DimVal9", "DimVal10" };
-
-        // TODO: Confirm if this needs to be thread-safe
-        private Random random = new Random();
-
-        [Params(false, true)]
-        public bool UseWithRef { get; set; }
-
-        [GlobalSetup]
-        public void Setup()
+        var metricExporter = new TestExporter<Metric>(ProcessExport);
+        void ProcessExport(Batch<Metric> batch)
         {
-            var metricExporter = new TestExporter<Metric>(ProcessExport);
-            void ProcessExport(Batch<Metric> batch)
+            double sum = 0;
+            foreach (var metric in batch)
             {
-                double sum = 0;
-                foreach (var metric in batch)
+                if (this.UseWithRef)
                 {
-                    if (this.UseWithRef)
+                    // The performant way of iterating.
+                    foreach (ref readonly var metricPoint in metric.GetMetricPoints())
                     {
-                        // The performant way of iterating.
-                        foreach (ref var metricPoint in metric.GetMetricPoints())
-                        {
-                            sum += metricPoint.LongValue;
-                        }
+                        sum += metricPoint.GetSumDouble();
                     }
-                    else
+                }
+                else
+                {
+                    // The non-performant way of iterating.
+                    // This is still "correct", but less performant.
+                    foreach (var metricPoint in metric.GetMetricPoints())
                     {
-                        // The non-performant way of iterating.
-                        // This is still "correct", but less performant.
-                        foreach (var metricPoint in metric.GetMetricPoints())
-                        {
-                            sum += metricPoint.LongValue;
-                        }
+                        sum += metricPoint.GetSumDouble();
                     }
                 }
             }
-
-            this.reader = new BaseExportingMetricReader(metricExporter)
-            {
-                PreferredAggregationTemporality = AggregationTemporality.Cumulative,
-            };
-            this.provider = Sdk.CreateMeterProviderBuilder()
-                .AddMeter("TestMeter")
-                .AddReader(this.reader)
-                .Build();
-
-            this.meter = new Meter("TestMeter");
-            this.counter = this.meter.CreateCounter<double>("counter");
-            this.token = new CancellationTokenSource();
-            this.writeMetricTask = new Task(() =>
-            {
-                while (!this.token.IsCancellationRequested)
-                {
-                    var tag1 = new KeyValuePair<string, object>("DimName1", this.dimensionValues[this.random.Next(0, 10)]);
-                    var tag2 = new KeyValuePair<string, object>("DimName2", this.dimensionValues[this.random.Next(0, 10)]);
-                    var tag3 = new KeyValuePair<string, object>("DimName3", this.dimensionValues[this.random.Next(0, 10)]);
-                    this.counter.Add(100.00, tag1, tag2, tag3);
-                }
-            });
-            this.writeMetricTask.Start();
         }
 
-        [GlobalCleanup]
-        public void Cleanup()
+        this.reader = new BaseExportingMetricReader(metricExporter)
         {
-            this.token.Cancel();
-            this.token.Dispose();
-            this.writeMetricTask.Wait();
-            this.meter.Dispose();
-            this.provider.Dispose();
-        }
+            TemporalityPreference = MetricReaderTemporalityPreference.Cumulative,
+        };
 
-        [Benchmark]
-        public void Collect()
+        this.meter = new Meter(Utils.GetCurrentMethodName());
+
+        this.provider = Sdk.CreateMeterProviderBuilder()
+            .AddMeter(this.meter.Name)
+            .AddReader(this.reader)
+            .Build();
+
+        this.counter = this.meter.CreateCounter<double>("counter");
+        this.token = new CancellationTokenSource();
+        this.writeMetricTask = new Task(() =>
         {
-            this.reader.Collect();
-        }
+            while (!this.token.IsCancellationRequested)
+            {
+                var tag1 = new KeyValuePair<string, object>("DimName1", this.dimensionValues[this.random.Next(0, 10)]);
+                var tag2 = new KeyValuePair<string, object>("DimName2", this.dimensionValues[this.random.Next(0, 10)]);
+                var tag3 = new KeyValuePair<string, object>("DimName3", this.dimensionValues[this.random.Next(0, 10)]);
+                this.counter.Add(100.00, tag1, tag2, tag3);
+            }
+        });
+        this.writeMetricTask.Start();
+    }
+
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        this.token.Cancel();
+        this.token.Dispose();
+        this.writeMetricTask.Wait();
+        this.meter.Dispose();
+        this.provider.Dispose();
+    }
+
+    [Benchmark]
+    public void Collect()
+    {
+        this.reader.Collect();
     }
 }

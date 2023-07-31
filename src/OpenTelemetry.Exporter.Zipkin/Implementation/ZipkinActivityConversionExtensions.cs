@@ -14,227 +14,265 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Diagnostics;
 using OpenTelemetry.Internal;
 using OpenTelemetry.Trace;
 
-namespace OpenTelemetry.Exporter.Zipkin.Implementation
+namespace OpenTelemetry.Exporter.Zipkin.Implementation;
+
+internal static class ZipkinActivityConversionExtensions
 {
-    internal static class ZipkinActivityConversionExtensions
+    internal const string ZipkinErrorFlagTagName = "error";
+    private const long TicksPerMicrosecond = TimeSpan.TicksPerMillisecond / 1000;
+    private const long UnixEpochTicks = 621355968000000000L; // = DateTimeOffset.FromUnixTimeMilliseconds(0).Ticks
+    private const long UnixEpochMicroseconds = UnixEpochTicks / TicksPerMicrosecond;
+
+    private static readonly ConcurrentDictionary<(string, int), ZipkinEndpoint> RemoteEndpointCache = new();
+
+    internal static ZipkinSpan ToZipkinSpan(this Activity activity, ZipkinEndpoint localEndpoint, bool useShortTraceIds = false)
     {
-        internal const string ZipkinErrorFlagTagName = "error";
-        private const long TicksPerMicrosecond = TimeSpan.TicksPerMillisecond / 1000;
-        private const long UnixEpochTicks = 621355968000000000L; // = DateTimeOffset.FromUnixTimeMilliseconds(0).Ticks
-        private const long UnixEpochMicroseconds = UnixEpochTicks / TicksPerMicrosecond;
+        var context = activity.Context;
 
-        private static readonly ConcurrentDictionary<(string, int), ZipkinEndpoint> RemoteEndpointCache = new ConcurrentDictionary<(string, int), ZipkinEndpoint>();
+        string parentId = activity.ParentSpanId == default ?
+            null
+            : EncodeSpanId(activity.ParentSpanId);
 
-        internal static ZipkinSpan ToZipkinSpan(this Activity activity, ZipkinEndpoint localEndpoint, bool useShortTraceIds = false)
+        var tagState = new TagEnumerationState
         {
-            var context = activity.Context;
+            Tags = PooledList<KeyValuePair<string, object>>.Create(),
+        };
 
-            string parentId = activity.ParentSpanId == default ?
-                null
-                : EncodeSpanId(activity.ParentSpanId);
+        tagState.EnumerateTags(activity);
 
-            var tagState = new TagEnumerationState
+        // When status is set on Activity using the native Status field in activity,
+        // which was first introduced in System.Diagnostic.DiagnosticSource 6.0.0.
+        if (activity.Status != ActivityStatusCode.Unset)
+        {
+            if (activity.Status == ActivityStatusCode.Ok)
             {
-                Tags = PooledList<KeyValuePair<string, object>>.Create(),
-            };
-
-            activity.EnumerateTags(ref tagState);
-
-            var activitySource = activity.Source;
-            if (!string.IsNullOrEmpty(activitySource.Name))
-            {
-                PooledList<KeyValuePair<string, object>>.Add(ref tagState.Tags, new KeyValuePair<string, object>("otel.library.name", activitySource.Name));
-                if (!string.IsNullOrEmpty(activitySource.Version))
-                {
-                    PooledList<KeyValuePair<string, object>>.Add(ref tagState.Tags, new KeyValuePair<string, object>("otel.library.version", activitySource.Version));
-                }
+                PooledList<KeyValuePair<string, object>>.Add(
+                ref tagState.Tags,
+                new KeyValuePair<string, object>(
+                    SpanAttributeConstants.StatusCodeKey,
+                    "OK"));
             }
 
-            ZipkinEndpoint remoteEndpoint = null;
-            if (activity.Kind == ActivityKind.Client || activity.Kind == ActivityKind.Producer)
+            // activity.Status is Error
+            else
             {
-                PeerServiceResolver.Resolve(ref tagState, out string peerServiceName, out bool addAsTag);
+                PooledList<KeyValuePair<string, object>>.Add(
+                    ref tagState.Tags,
+                    new KeyValuePair<string, object>(
+                        SpanAttributeConstants.StatusCodeKey,
+                        "ERROR"));
 
-                if (peerServiceName != null)
-                {
-                    remoteEndpoint = RemoteEndpointCache.GetOrAdd((peerServiceName, default), ZipkinEndpoint.Create);
-                    if (addAsTag)
-                    {
-                        PooledList<KeyValuePair<string, object>>.Add(ref tagState.Tags, new KeyValuePair<string, object>(SemanticConventions.AttributePeerService, peerServiceName));
-                    }
-                }
+                // Error flag rule from https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk_exporters/zipkin.md#status
+                PooledList<KeyValuePair<string, object>>.Add(
+                    ref tagState.Tags,
+                    new KeyValuePair<string, object>(
+                        ZipkinErrorFlagTagName,
+                        activity.StatusDescription ?? string.Empty));
             }
+        }
 
+        // In the case when both activity status and status tag were set,
+        // activity status takes precedence over status tag.
+        else if (tagState.StatusCode.HasValue && tagState.StatusCode != StatusCode.Unset)
+        {
+            PooledList<KeyValuePair<string, object>>.Add(
+                ref tagState.Tags,
+                new KeyValuePair<string, object>(
+                    SpanAttributeConstants.StatusCodeKey,
+                    StatusHelper.GetTagValueForStatusCode(tagState.StatusCode.Value)));
+
+            // Error flag rule from https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk_exporters/zipkin.md#status
             if (tagState.StatusCode == StatusCode.Error)
             {
-                // Error flag rule from https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk_exporters/zipkin.md#status
                 PooledList<KeyValuePair<string, object>>.Add(
                     ref tagState.Tags,
                     new KeyValuePair<string, object>(
                         ZipkinErrorFlagTagName,
                         tagState.StatusDescription ?? string.Empty));
             }
-
-            EventEnumerationState eventState = default;
-            activity.EnumerateEvents(ref eventState);
-
-            return new ZipkinSpan(
-                EncodeTraceId(context.TraceId, useShortTraceIds),
-                parentId,
-                EncodeSpanId(context.SpanId),
-                ToActivityKind(activity),
-                activity.DisplayName,
-                activity.StartTimeUtc.ToEpochMicroseconds(),
-                duration: activity.Duration.ToEpochMicroseconds(),
-                localEndpoint,
-                remoteEndpoint,
-                eventState.Annotations,
-                tagState.Tags,
-                null,
-                null);
         }
 
-        internal static string EncodeSpanId(ActivitySpanId spanId)
+        var activitySource = activity.Source;
+        if (!string.IsNullOrEmpty(activitySource.Name))
         {
-            return spanId.ToHexString();
-        }
-
-        internal static long ToEpochMicroseconds(this DateTimeOffset dateTimeOffset)
-        {
-            // Truncate sub-microsecond precision before offsetting by the Unix Epoch to avoid
-            // the last digit being off by one for dates that result in negative Unix times
-            long microseconds = dateTimeOffset.Ticks / TicksPerMicrosecond;
-            return microseconds - UnixEpochMicroseconds;
-        }
-
-        internal static long ToEpochMicroseconds(this TimeSpan timeSpan)
-        {
-            return timeSpan.Ticks / TicksPerMicrosecond;
-        }
-
-        internal static long ToEpochMicroseconds(this DateTime utcDateTime)
-        {
-            // Truncate sub-microsecond precision before offsetting by the Unix Epoch to avoid
-            // the last digit being off by one for dates that result in negative Unix times
-            long microseconds = utcDateTime.Ticks / TicksPerMicrosecond;
-            return microseconds - UnixEpochMicroseconds;
-        }
-
-        private static string EncodeTraceId(ActivityTraceId traceId, bool useShortTraceIds)
-        {
-            var id = traceId.ToHexString();
-
-            if (id.Length > 16 && useShortTraceIds)
+            PooledList<KeyValuePair<string, object>>.Add(ref tagState.Tags, new KeyValuePair<string, object>("otel.library.name", activitySource.Name));
+            if (!string.IsNullOrEmpty(activitySource.Version))
             {
-                id = id.Substring(id.Length - 16, 16);
+                PooledList<KeyValuePair<string, object>>.Add(ref tagState.Tags, new KeyValuePair<string, object>("otel.library.version", activitySource.Version));
             }
-
-            return id;
         }
 
-        private static string ToActivityKind(Activity activity)
+        ZipkinEndpoint remoteEndpoint = null;
+        if (activity.Kind == ActivityKind.Client || activity.Kind == ActivityKind.Producer)
         {
-            return activity.Kind switch
+            PeerServiceResolver.Resolve(ref tagState, out string peerServiceName, out bool addAsTag);
+
+            if (peerServiceName != null)
             {
-                ActivityKind.Server => "SERVER",
-                ActivityKind.Producer => "PRODUCER",
-                ActivityKind.Consumer => "CONSUMER",
-                ActivityKind.Client => "CLIENT",
-                _ => null,
-            };
-        }
-
-        internal struct TagEnumerationState : IActivityEnumerator<KeyValuePair<string, object>>, PeerServiceResolver.IPeerServiceState
-        {
-            public PooledList<KeyValuePair<string, object>> Tags;
-
-            public string PeerService { get; set; }
-
-            public int? PeerServicePriority { get; set; }
-
-            public string HostName { get; set; }
-
-            public string IpAddress { get; set; }
-
-            public long Port { get; set; }
-
-            public StatusCode? StatusCode { get; set; }
-
-            public string StatusDescription { get; set; }
-
-            public bool ForEach(KeyValuePair<string, object> activityTag)
-            {
-                if (activityTag.Value == null)
+                remoteEndpoint = RemoteEndpointCache.GetOrAdd((peerServiceName, default), ZipkinEndpoint.Create);
+                if (addAsTag)
                 {
-                    return true;
+                    PooledList<KeyValuePair<string, object>>.Add(ref tagState.Tags, new KeyValuePair<string, object>(SemanticConventions.AttributePeerService, peerServiceName));
+                }
+            }
+        }
+
+        EventEnumerationState eventState = default;
+        eventState.EnumerateEvents(activity);
+
+        return new ZipkinSpan(
+            EncodeTraceId(context.TraceId, useShortTraceIds),
+            parentId,
+            EncodeSpanId(context.SpanId),
+            ToActivityKind(activity),
+            activity.DisplayName,
+            activity.StartTimeUtc.ToEpochMicroseconds(),
+            duration: activity.Duration.ToEpochMicroseconds(),
+            localEndpoint,
+            remoteEndpoint,
+            eventState.Annotations,
+            tagState.Tags,
+            null,
+            null);
+    }
+
+    internal static string EncodeSpanId(ActivitySpanId spanId)
+    {
+        return spanId.ToHexString();
+    }
+
+    internal static long ToEpochMicroseconds(this DateTimeOffset dateTimeOffset)
+    {
+        // Truncate sub-microsecond precision before offsetting by the Unix Epoch to avoid
+        // the last digit being off by one for dates that result in negative Unix times
+        long microseconds = dateTimeOffset.Ticks / TicksPerMicrosecond;
+        return microseconds - UnixEpochMicroseconds;
+    }
+
+    internal static long ToEpochMicroseconds(this TimeSpan timeSpan)
+    {
+        return timeSpan.Ticks / TicksPerMicrosecond;
+    }
+
+    internal static long ToEpochMicroseconds(this DateTime utcDateTime)
+    {
+        // Truncate sub-microsecond precision before offsetting by the Unix Epoch to avoid
+        // the last digit being off by one for dates that result in negative Unix times
+        long microseconds = utcDateTime.Ticks / TicksPerMicrosecond;
+        return microseconds - UnixEpochMicroseconds;
+    }
+
+    private static string EncodeTraceId(ActivityTraceId traceId, bool useShortTraceIds)
+    {
+        var id = traceId.ToHexString();
+
+        if (id.Length > 16 && useShortTraceIds)
+        {
+            id = id.Substring(id.Length - 16, 16);
+        }
+
+        return id;
+    }
+
+    private static string ToActivityKind(Activity activity)
+    {
+        return activity.Kind switch
+        {
+            ActivityKind.Server => "SERVER",
+            ActivityKind.Producer => "PRODUCER",
+            ActivityKind.Consumer => "CONSUMER",
+            ActivityKind.Client => "CLIENT",
+            _ => null,
+        };
+    }
+
+    internal struct TagEnumerationState : PeerServiceResolver.IPeerServiceState
+    {
+        public PooledList<KeyValuePair<string, object>> Tags;
+
+        public string PeerService { get; set; }
+
+        public int? PeerServicePriority { get; set; }
+
+        public string HostName { get; set; }
+
+        public string IpAddress { get; set; }
+
+        public long Port { get; set; }
+
+        public StatusCode? StatusCode { get; set; }
+
+        public string StatusDescription { get; set; }
+
+        public void EnumerateTags(Activity activity)
+        {
+            foreach (ref readonly var tag in activity.EnumerateTagObjects())
+            {
+                if (tag.Value == null)
+                {
+                    continue;
                 }
 
-                string key = activityTag.Key;
+                string key = tag.Key;
 
-                if (activityTag.Value is string strVal)
+                if (tag.Value is string strVal)
                 {
                     PeerServiceResolver.InspectTag(ref this, key, strVal);
 
                     if (key == SpanAttributeConstants.StatusCodeKey)
                     {
                         this.StatusCode = StatusHelper.GetStatusCodeForTagValue(strVal);
-
-                        if (!this.StatusCode.HasValue || this.StatusCode == Trace.StatusCode.Unset)
-                        {
-                            // Unset Status is not sent: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk_exporters/zipkin.md#status
-                            return true;
-                        }
-
-                        // Normalize status since it is user-driven.
-                        activityTag = new KeyValuePair<string, object>(key, StatusHelper.GetTagValueForStatusCode(this.StatusCode.Value));
+                        continue;
                     }
                     else if (key == SpanAttributeConstants.StatusDescriptionKey)
                     {
                         // Description is sent as `error` but only if StatusCode is Error. See: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk_exporters/zipkin.md#status
                         this.StatusDescription = strVal;
-                        return true;
+                        continue;
                     }
                     else if (key == ZipkinErrorFlagTagName)
                     {
                         // Ignore `error` tag if it exists, it will be added based on StatusCode + StatusDescription.
-                        return true;
+                        continue;
                     }
                 }
-                else if (activityTag.Value is int intVal && activityTag.Key == SemanticConventions.AttributeNetPeerPort)
+                else if (tag.Value is int intVal && tag.Key == SemanticConventions.AttributeNetPeerPort)
                 {
                     PeerServiceResolver.InspectTag(ref this, key, intVal);
                 }
 
-                PooledList<KeyValuePair<string, object>>.Add(ref this.Tags, activityTag);
-
-                return true;
+                PooledList<KeyValuePair<string, object>>.Add(ref this.Tags, tag);
             }
         }
+    }
 
-        private struct EventEnumerationState : IActivityEnumerator<ActivityEvent>
+    private struct EventEnumerationState
+    {
+        public bool Created;
+
+        public PooledList<ZipkinAnnotation> Annotations;
+
+        public void EnumerateEvents(Activity activity)
         {
-            public bool Created;
+            var enumerator = activity.EnumerateEvents();
 
-            public PooledList<ZipkinAnnotation> Annotations;
-
-            public bool ForEach(ActivityEvent activityEvent)
+            if (enumerator.MoveNext())
             {
-                if (!this.Created)
+                this.Annotations = PooledList<ZipkinAnnotation>.Create();
+                this.Created = true;
+
+                do
                 {
-                    this.Annotations = PooledList<ZipkinAnnotation>.Create();
-                    this.Created = true;
+                    ref readonly var @event = ref enumerator.Current;
+
+                    PooledList<ZipkinAnnotation>.Add(ref this.Annotations, new ZipkinAnnotation(@event.Timestamp.ToEpochMicroseconds(), @event.Name));
                 }
-
-                PooledList<ZipkinAnnotation>.Add(ref this.Annotations, new ZipkinAnnotation(activityEvent.Timestamp.ToEpochMicroseconds(), activityEvent.Name));
-
-                return true;
+                while (enumerator.MoveNext());
             }
         }
     }

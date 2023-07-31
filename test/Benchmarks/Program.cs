@@ -13,15 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 // </copyright>
+
 using BenchmarkDotNet.Running;
 
-namespace OpenTelemetry.Benchmarks
+namespace OpenTelemetry.Benchmarks;
+
+internal static class Program
 {
-    internal static class Program
+    public static void Main(string[] args)
     {
-        public static void Main(string[] args)
-        {
-            BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
-        }
+        BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
     }
 }

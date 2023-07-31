@@ -14,17 +14,18 @@
 // limitations under the License.
 // </copyright>
 
-namespace OpenTelemetry.Trace
+#nullable enable
+
+namespace OpenTelemetry.Trace;
+
+/// <summary>
+/// Sampler implementation which always returns <c>SamplingDecision.Drop</c>.
+/// </summary>
+public sealed class AlwaysOffSampler : Sampler
 {
-    /// <summary>
-    /// Sampler implementation which always returns <c>SamplingDecision.Drop</c>.
-    /// </summary>
-    public sealed class AlwaysOffSampler : Sampler
+    /// <inheritdoc />
+    public override SamplingResult ShouldSample(in SamplingParameters samplingParameters)
     {
-        /// <inheritdoc />
-        public override SamplingResult ShouldSample(in SamplingParameters samplingParameters)
-        {
-            return new SamplingResult(SamplingDecision.Drop);
-        }
+        return new SamplingResult(SamplingDecision.Drop);
     }
 }

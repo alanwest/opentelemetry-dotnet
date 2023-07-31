@@ -1,30 +1,34 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net461;net5.0</TargetFrameworks>
+    <TargetFrameworks>$(DefaultTargetFrameworks)</TargetFrameworks>
     <Description>Zipkin exporter for OpenTelemetry .NET</Description>
     <PackageTags>$(PackageTags);Zipkin;distributed-tracing</PackageTags>
     <MinVerTagPrefix>core-</MinVerTagPrefix>
-    <!-- TODO: Remove this once a version targeting net5.0 is released -->
-    <RunApiCompat Condition="$(TargetFramework) == 'net5.0'">false</RunApiCompat>
+
+    <!-- this is temporary. will remove in future PR. -->
+    <Nullable>disable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry.Api\Internal\ExceptionExtensions.cs" Link="Includes\ExceptionExtensions.cs" />
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry.Api\Internal\SemanticConventions.cs" Link="Includes\SemanticConventions.cs" />
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry.Api\Internal\SpanAttributeConstants.cs" Link="Includes\SpanAttributeConstants.cs" />
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry.Api\Internal\ActivityHelperExtensions.cs" Link="Includes\ActivityHelperExtensions.cs" />
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry.Api\Internal\StatusHelper.cs" Link="Includes\StatusHelper.cs" />
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry.Api\Internal\IActivityEnumerator.cs" Link="Includes\IActivityEnumerator.cs" />
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry.Api\Internal\EnumerationHelper.cs" Link="Includes\EnumerationHelper.cs" />
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry\Internal\PooledList.cs" Link="Includes\PooledList.cs" />
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry\Internal\PeerServiceResolver.cs" Link="Includes\PeerServiceResolver.cs" />
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry\Internal\ResourceSemanticConventions.cs" Link="Includes\ResourceSemanticConventions.cs" />
-    <Compile Include="$(RepoRoot)\src\OpenTelemetry\Internal\ServiceProviderExtensions.cs" Link="Includes\ServiceProviderExtensions.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\Guard.cs" Link="Includes\Guard.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\PooledList.cs" Link="Includes\PooledList.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\ResourceSemanticConventions.cs" Link="Includes\ResourceSemanticConventions.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\ActivityHelperExtensions.cs" Link="Includes\ActivityHelperExtensions.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\EnvironmentVariables\*.cs" Link="Includes\EnvironmentVariables\%(Filename).cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\ExceptionExtensions.cs" Link="Includes\ExceptionExtensions.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\Options\*.cs" Link="Includes\Options\%(Filename).cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\PeerServiceResolver.cs" Link="Includes\PeerServiceResolver.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\SemanticConventions.cs" Link="Includes\SemanticConventions.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\SpanAttributeConstants.cs" Link="Includes\SpanAttributeConstants.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\StatusHelper.cs" Link="Includes\StatusHelper.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\TagTransformer.cs" Link="Includes\TagTransformer.cs" />
+    <Compile Include="$(RepoRoot)\src\Shared\TagTransformerJsonHelper.cs" Link="Includes\TagTransformerJsonHelper.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="$(RepoRoot)\src\OpenTelemetry\OpenTelemetry.csproj" />
-    <PackageReference Include="System.Text.Json" Version="$(SystemTextJsonPkgVer)" />
+    <PackageReference Include="System.Text.Encodings.Web" />
+    <PackageReference Include="System.Text.Json" />
   </ItemGroup>
 
 </Project>

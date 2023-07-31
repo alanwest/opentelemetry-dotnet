@@ -14,81 +14,57 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+#nullable enable
+
 using System.Diagnostics;
-using System.Security;
+using Microsoft.Extensions.Configuration;
 using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Trace
+namespace OpenTelemetry.Trace;
+
+/// <summary>
+/// Batch span processor options.
+/// OTEL_BSP_MAX_QUEUE_SIZE, OTEL_BSP_MAX_EXPORT_BATCH_SIZE, OTEL_BSP_EXPORT_TIMEOUT, OTEL_BSP_SCHEDULE_DELAY
+/// environment variables are parsed during object construction.
+/// </summary>
+public class BatchExportActivityProcessorOptions : BatchExportProcessorOptions<Activity>
 {
+    internal const string MaxQueueSizeEnvVarKey = "OTEL_BSP_MAX_QUEUE_SIZE";
+
+    internal const string MaxExportBatchSizeEnvVarKey = "OTEL_BSP_MAX_EXPORT_BATCH_SIZE";
+
+    internal const string ExporterTimeoutEnvVarKey = "OTEL_BSP_EXPORT_TIMEOUT";
+
+    internal const string ScheduledDelayEnvVarKey = "OTEL_BSP_SCHEDULE_DELAY";
+
     /// <summary>
-    /// Batch span processor options.
-    /// OTEL_BSP_MAX_QUEUE_SIZE, OTEL_BSP_MAX_EXPORT_BATCH_SIZE, OTEL_BSP_EXPORT_TIMEOUT, OTEL_BSP_SCHEDULE_DELAY
-    /// environment variables are parsed during object construction.
+    /// Initializes a new instance of the <see cref="BatchExportActivityProcessorOptions"/> class.
     /// </summary>
-    public class BatchExportActivityProcessorOptions : BatchExportProcessorOptions<Activity>
+    public BatchExportActivityProcessorOptions()
+        : this(new ConfigurationBuilder().AddEnvironmentVariables().Build())
     {
-        internal const string MaxQueueSizeEnvVarKey = "OTEL_BSP_MAX_QUEUE_SIZE";
+    }
 
-        internal const string MaxExportBatchSizeEnvVarKey = "OTEL_BSP_MAX_EXPORT_BATCH_SIZE";
-
-        internal const string ExporterTimeoutEnvVarKey = "OTEL_BSP_EXPORT_TIMEOUT";
-
-        internal const string ScheduledDelayEnvVarKey = "OTEL_BSP_SCHEDULE_DELAY";
-
-        public BatchExportActivityProcessorOptions()
+    internal BatchExportActivityProcessorOptions(IConfiguration configuration)
+    {
+        if (configuration.TryGetIntValue(ExporterTimeoutEnvVarKey, out int value))
         {
-            int value;
-
-            if (LoadEnvVarInt(ExporterTimeoutEnvVarKey, out value))
-            {
-                this.ExporterTimeoutMilliseconds = value;
-            }
-
-            if (LoadEnvVarInt(MaxExportBatchSizeEnvVarKey, out value))
-            {
-                this.MaxExportBatchSize = value;
-            }
-
-            if (LoadEnvVarInt(MaxQueueSizeEnvVarKey, out value))
-            {
-                this.MaxQueueSize = value;
-            }
-
-            if (LoadEnvVarInt(ScheduledDelayEnvVarKey, out value))
-            {
-                this.ScheduledDelayMilliseconds = value;
-            }
+            this.ExporterTimeoutMilliseconds = value;
         }
 
-        private static bool LoadEnvVarInt(string envVarKey, out int result)
+        if (configuration.TryGetIntValue(MaxExportBatchSizeEnvVarKey, out value))
         {
-            result = 0;
+            this.MaxExportBatchSize = value;
+        }
 
-            string value;
-            try
-            {
-                value = Environment.GetEnvironmentVariable(envVarKey);
-            }
-            catch (SecurityException ex)
-            {
-                // The caller does not have the required permission to
-                // retrieve the value of an environment variable from the current process.
-                OpenTelemetrySdkEventSource.Log.MissingPermissionsToReadEnvironmentVariable(ex);
-                return false;
-            }
+        if (configuration.TryGetIntValue(MaxQueueSizeEnvVarKey, out value))
+        {
+            this.MaxQueueSize = value;
+        }
 
-            if (string.IsNullOrEmpty(value))
-            {
-                return false;
-            }
-
-            if (!int.TryParse(value, out result))
-            {
-                throw new ArgumentException($"{envVarKey} environment variable has an invalid value: '${value}'");
-            }
-
-            return true;
+        if (configuration.TryGetIntValue(ScheduledDelayEnvVarKey, out value))
+        {
+            this.ScheduledDelayMilliseconds = value;
         }
     }
 }

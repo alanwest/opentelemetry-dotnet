@@ -1,5 +1,3 @@
-OpenTelemetry.Exporter.OtlpExporterOptions.Protocol.get -> OpenTelemetry.Exporter.ExportProtocol
-OpenTelemetry.Exporter.OtlpExporterOptions.Protocol.set -> void
-OpenTelemetry.Exporter.OtlpExportProtocol
-OpenTelemetry.Exporter.OtlpExportProtocol.Grpc = 0 -> OpenTelemetry.Exporter.OtlpExportProtocol
-OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf = 1 -> OpenTelemetry.Exporter.OtlpExportProtocol
+OpenTelemetry.Logs.OtlpLogExporterHelperExtensions
+static OpenTelemetry.Logs.OtlpLogExporterHelperExtensions.AddOtlpExporter(this OpenTelemetry.Logs.OpenTelemetryLoggerOptions loggerOptions) -> OpenTelemetry.Logs.OpenTelemetryLoggerOptions
+static OpenTelemetry.Logs.OtlpLogExporterHelperExtensions.AddOtlpExporter(this OpenTelemetry.Logs.OpenTelemetryLoggerOptions loggerOptions, System.Action<OpenTelemetry.Exporter.OtlpExporterOptions> configure) -> OpenTelemetry.Logs.OpenTelemetryLoggerOptions

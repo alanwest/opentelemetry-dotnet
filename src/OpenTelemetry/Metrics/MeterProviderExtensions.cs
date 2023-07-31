@@ -14,146 +14,135 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Threading;
+using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Metrics
+namespace OpenTelemetry.Metrics;
+
+public static class MeterProviderExtensions
 {
-    public static class MeterProviderExtensions
+    /// <summary>
+    /// Flushes all the readers registered under MeterProviderSdk, blocks the current thread
+    /// until flush completed, shutdown signaled or timed out.
+    /// </summary>
+    /// <param name="provider">MeterProviderSdk instance on which ForceFlush will be called.</param>
+    /// <param name="timeoutMilliseconds">
+    /// The number (non-negative) of milliseconds to wait, or
+    /// <c>Timeout.Infinite</c> to wait indefinitely.
+    /// </param>
+    /// <returns>
+    /// Returns <c>true</c> when force flush succeeded; otherwise, <c>false</c>.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when the <c>timeoutMilliseconds</c> is smaller than -1.
+    /// </exception>
+    /// <remarks>
+    /// This function guarantees thread-safety.
+    /// </remarks>
+    public static bool ForceFlush(this MeterProvider provider, int timeoutMilliseconds = Timeout.Infinite)
     {
-        /// <summary>
-        /// Flushes all the readers registered under MeterProviderSdk, blocks the current thread
-        /// until flush completed, shutdown signaled or timed out.
-        /// </summary>
-        /// <param name="provider">MeterProviderSdk instance on which ForceFlush will be called.</param>
-        /// <param name="timeoutMilliseconds">
-        /// The number (non-negative) of milliseconds to wait, or
-        /// <c>Timeout.Infinite</c> to wait indefinitely.
-        /// </param>
-        /// <returns>
-        /// Returns <c>true</c> when force flush succeeded; otherwise, <c>false</c>.
-        /// </returns>
-        /// <exception cref="System.ArgumentOutOfRangeException">
-        /// Thrown when the <c>timeoutMilliseconds</c> is smaller than -1.
-        /// </exception>
-        /// <remarks>
-        /// This function guarantees thread-safety.
-        /// </remarks>
-        public static bool ForceFlush(this MeterProvider provider, int timeoutMilliseconds = Timeout.Infinite)
+        Guard.ThrowIfNull(provider);
+        Guard.ThrowIfInvalidTimeout(timeoutMilliseconds);
+
+        if (provider is MeterProviderSdk meterProviderSdk)
         {
-            if (provider == null)
+            try
             {
-                throw new ArgumentNullException(nameof(provider));
+                return meterProviderSdk.OnForceFlush(timeoutMilliseconds);
             }
-
-            if (timeoutMilliseconds < 0 && timeoutMilliseconds != Timeout.Infinite)
+            catch (Exception ex)
             {
-                throw new ArgumentOutOfRangeException(nameof(timeoutMilliseconds), timeoutMilliseconds, "timeoutMilliseconds should be non-negative or Timeout.Infinite.");
+                OpenTelemetrySdkEventSource.Log.MeterProviderException(nameof(meterProviderSdk.OnForceFlush), ex);
+                return false;
             }
-
-            if (provider is MeterProviderSdk meterProviderSdk)
-            {
-                try
-                {
-                    return meterProviderSdk.OnForceFlush(timeoutMilliseconds);
-                }
-                catch (Exception)
-                {
-                    // TODO: what event source do we use?
-                    // OpenTelemetrySdkEventSource.Log.MeterProviderException(nameof(meterProviderSdk.OnForceFlush), ex);
-                    return false;
-                }
-            }
-
-            return true;
         }
 
-        /// <summary>
-        /// Attempts to shutdown the MeterProviderSdk, blocks the current thread until
-        /// shutdown completed or timed out.
-        /// </summary>
-        /// <param name="provider">MeterProviderSdk instance on which Shutdown will be called.</param>
-        /// <param name="timeoutMilliseconds">
-        /// The number (non-negative) of milliseconds to wait, or
-        /// <c>Timeout.Infinite</c> to wait indefinitely.
-        /// </param>
-        /// <returns>
-        /// Returns <c>true</c> when shutdown succeeded; otherwise, <c>false</c>.
-        /// </returns>
-        /// <exception cref="System.ArgumentOutOfRangeException">
-        /// Thrown when the <c>timeoutMilliseconds</c> is smaller than -1.
-        /// </exception>
-        /// <remarks>
-        /// This function guarantees thread-safety. Only the first call will
-        /// win, subsequent calls will be no-op.
-        /// </remarks>
-        public static bool Shutdown(this MeterProvider provider, int timeoutMilliseconds = Timeout.Infinite)
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to shutdown the MeterProviderSdk, blocks the current thread until
+    /// shutdown completed or timed out.
+    /// </summary>
+    /// <param name="provider">MeterProviderSdk instance on which Shutdown will be called.</param>
+    /// <param name="timeoutMilliseconds">
+    /// The number (non-negative) of milliseconds to wait, or
+    /// <c>Timeout.Infinite</c> to wait indefinitely.
+    /// </param>
+    /// <returns>
+    /// Returns <c>true</c> when shutdown succeeded; otherwise, <c>false</c>.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when the <c>timeoutMilliseconds</c> is smaller than -1.
+    /// </exception>
+    /// <remarks>
+    /// This function guarantees thread-safety. Only the first call will
+    /// win, subsequent calls will be no-op.
+    /// </remarks>
+    public static bool Shutdown(this MeterProvider provider, int timeoutMilliseconds = Timeout.Infinite)
+    {
+        Guard.ThrowIfNull(provider);
+        Guard.ThrowIfInvalidTimeout(timeoutMilliseconds);
+
+        if (provider is MeterProviderSdk meterProviderSdk)
         {
-            if (provider == null)
+            if (Interlocked.Increment(ref meterProviderSdk.ShutdownCount) > 1)
             {
-                throw new ArgumentNullException(nameof(provider));
+                return false; // shutdown already called
             }
 
-            if (timeoutMilliseconds < 0 && timeoutMilliseconds != Timeout.Infinite)
+            try
             {
-                throw new ArgumentOutOfRangeException(nameof(timeoutMilliseconds), timeoutMilliseconds, "timeoutMilliseconds should be non-negative or Timeout.Infinite.");
+                return meterProviderSdk.OnShutdown(timeoutMilliseconds);
             }
-
-            if (provider is MeterProviderSdk meterProviderSdk)
+            catch (Exception ex)
             {
-                if (Interlocked.Increment(ref meterProviderSdk.ShutdownCount) > 1)
-                {
-                    return false; // shutdown already called
-                }
-
-                try
-                {
-                    return meterProviderSdk.OnShutdown(timeoutMilliseconds);
-                }
-                catch (Exception)
-                {
-                    // TODO: what event source do we use?
-                    // OpenTelemetrySdkEventSource.Log.MeterProviderException(nameof(meterProviderSdk.OnShutdown), ex);
-                    return false;
-                }
+                OpenTelemetrySdkEventSource.Log.MeterProviderException(nameof(meterProviderSdk.OnShutdown), ex);
+                return false;
             }
-
-            return true;
         }
 
-        public static bool TryFindExporter<T>(this MeterProvider provider, out T exporter)
-            where T : BaseExporter<Metric>
+        return true;
+    }
+
+    /// <summary>
+    /// Finds the Metric exporter of the given type from the provider.
+    /// </summary>
+    /// <typeparam name="T">The type of the Exporter.</typeparam>
+    /// <param name="provider">The MeterProvider from which Exporter should be found.</param>
+    /// <param name="exporter">The exporter instance.</param>
+    /// <returns>true if the exporter of specified Type is found; otherwise false.</returns>
+    internal static bool TryFindExporter<T>(this MeterProvider provider, out T exporter)
+        where T : BaseExporter<Metric>
+    {
+        if (provider is MeterProviderSdk meterProviderSdk)
         {
-            if (provider is MeterProviderSdk meterProviderSdk)
+            return TryFindExporter(meterProviderSdk.Reader, out exporter);
+        }
+
+        exporter = null;
+        return false;
+
+        static bool TryFindExporter(MetricReader reader, out T exporter)
+        {
+            if (reader is BaseExportingMetricReader exportingMetricReader)
             {
-                return TryFindExporter(meterProviderSdk.Reader, out exporter);
+                exporter = exportingMetricReader.Exporter as T;
+                return exporter != null;
+            }
+
+            if (reader is CompositeMetricReader compositeMetricReader)
+            {
+                foreach (MetricReader childReader in compositeMetricReader)
+                {
+                    if (TryFindExporter(childReader, out exporter))
+                    {
+                        return true;
+                    }
+                }
             }
 
             exporter = null;
             return false;
-
-            static bool TryFindExporter(MetricReader reader, out T exporter)
-            {
-                if (reader is BaseExportingMetricReader exportingMetricReader)
-                {
-                    exporter = exportingMetricReader.Exporter as T;
-                    return exporter != null;
-                }
-
-                if (reader is CompositeMetricReader compositeMetricReader)
-                {
-                    foreach (MetricReader childReader in compositeMetricReader)
-                    {
-                        if (TryFindExporter(childReader, out exporter))
-                        {
-                            return true;
-                        }
-                    }
-                }
-
-                exporter = null;
-                return false;
-            }
         }
     }
 }

@@ -14,30 +14,16 @@
 // limitations under the License.
 // </copyright>
 
-using OpenTelemetry.Instrumentation;
 using OpenTelemetry.Internal;
 using Xunit;
 
-namespace OpenTelemetry.Tests
+namespace OpenTelemetry.Tests;
+
+public class EventSourceTest
 {
-    public class EventSourceTest
+    [Fact]
+    public void EventSourceTest_OpenTelemetrySdkEventSource()
     {
-        [Fact]
-        public void EventSourceTest_InstrumentationEventSource()
-        {
-            EventSourceTestHelper.MethodsAreImplementedConsistentlyWithTheirAttributes(InstrumentationEventSource.Log);
-        }
-
-        [Fact]
-        public void EventSourceTest_OpenTelemetryApiEventSource()
-        {
-            EventSourceTestHelper.MethodsAreImplementedConsistentlyWithTheirAttributes(OpenTelemetryApiEventSource.Log);
-        }
-
-        [Fact]
-        public void EventSourceTest_OpenTelemetrySdkEventSource()
-        {
-            EventSourceTestHelper.MethodsAreImplementedConsistentlyWithTheirAttributes(OpenTelemetrySdkEventSource.Log);
-        }
+        EventSourceTestHelper.MethodsAreImplementedConsistentlyWithTheirAttributes(OpenTelemetrySdkEventSource.Log);
     }
 }

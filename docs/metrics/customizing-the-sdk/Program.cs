@@ -14,27 +14,33 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Diagnostics.Metrics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+
+namespace CustomizingTheSdk;
 
 public class Program
 {
-    private static readonly Meter Meter1 = new Meter("CompanyA.ProductA.Library1", "1.0");
-    private static readonly Meter Meter2 = new Meter("CompanyA.ProductB.Library2", "1.0");
+    private static readonly Meter Meter1 = new("CompanyA.ProductA.Library1", "1.0");
+    private static readonly Meter Meter2 = new("CompanyA.ProductB.Library2", "1.0");
 
-    public static void Main(string[] args)
+    public static void Main()
     {
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
+            .ConfigureResource(res => res.AddService("example-service"))
             .AddMeter(Meter1.Name)
             .AddMeter(Meter2.Name)
 
             // Rename an instrument to new name.
             .AddView(instrumentName: "MyCounter", name: "MyCounterRenamed")
 
-            // Change Histogram bounds
-            .AddView(instrumentName: "MyHistogram", new HistogramConfiguration() { BucketBounds = new double[] { 10, 20 } })
+            // Change Histogram boundaries using the Explicit Bucket Histogram aggregation.
+            .AddView(instrumentName: "MyHistogram", new ExplicitBucketHistogramConfiguration() { Boundaries = new double[] { 10, 20 } })
+
+            // Change Histogram to use the Base2 Exponential Bucket Histogram aggregation.
+            .AddView(instrumentName: "MyExponentialBucketHistogram", new Base2ExponentialBucketHistogramConfiguration())
 
             // For the instrument "MyCounterCustomTags", aggregate with only the keys "tag1", "tag2".
             .AddView(instrumentName: "MyCounterCustomTags", new MetricStreamConfiguration() { TagKeys = new string[] { "tag1", "tag2" } })
@@ -44,15 +50,15 @@ public class Program
 
             // Advanced selection criteria and config via Func<Instrument, MetricStreamConfiguration>
             .AddView((instrument) =>
-             {
-                 if (instrument.Meter.Name.Equals("CompanyA.ProductB.Library2") &&
-                     instrument.GetType().Name.Contains("Histogram"))
-                 {
-                     return new HistogramConfiguration() { BucketBounds = new double[] { 10, 20 } };
-                 }
+            {
+                if (instrument.Meter.Name.Equals("CompanyA.ProductB.Library2") &&
+                    instrument.GetType().Name.Contains("Histogram"))
+                {
+                    return new ExplicitBucketHistogramConfiguration() { Boundaries = new double[] { 10, 20 } };
+                }
 
-                 return null;
-             })
+                return null;
+            })
 
             // An instrument which does not match any views
             // gets processed with default behavior. (SDK default)
@@ -60,7 +66,7 @@ public class Program
             // turn off the above default. i.e any
             // instrument which does not match any views
             // gets dropped.
-            // .AddView(instrumentName: "*", new MetricStreamConfiguration() { Aggregation = Aggregation.Drop })
+            // .AddView(instrumentName: "*", MetricStreamConfiguration.Drop)
             .AddConsoleExporter()
             .Build();
 
@@ -76,6 +82,12 @@ public class Program
         for (int i = 0; i < 20000; i++)
         {
             histogram.Record(random.Next(1, 1000), new("tag1", "value1"), new("tag2", "value2"));
+        }
+
+        var exponentialBucketHistogram = Meter1.CreateHistogram<long>("MyExponentialBucketHistogram");
+        for (int i = 0; i < 20000; i++)
+        {
+            exponentialBucketHistogram.Record(random.Next(1, 1000), new("tag1", "value1"), new("tag2", "value2"));
         }
 
         var counterCustomTags = Meter1.CreateCounter<long>("MyCounterCustomTags");

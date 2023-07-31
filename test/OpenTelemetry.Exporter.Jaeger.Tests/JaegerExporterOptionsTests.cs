@@ -14,80 +14,143 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using OpenTelemetry.Trace;
 using Xunit;
 
-namespace OpenTelemetry.Exporter.Jaeger.Tests
+namespace OpenTelemetry.Exporter.Jaeger.Tests;
+
+public class JaegerExporterOptionsTests : IDisposable
 {
-    public class JaegerExporterOptionsTests : IDisposable
+    public JaegerExporterOptionsTests()
     {
-        public JaegerExporterOptionsTests()
+        ClearEnvVars();
+    }
+
+    public void Dispose()
+    {
+        ClearEnvVars();
+        GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public void JaegerExporterOptions_Defaults()
+    {
+        var options = new JaegerExporterOptions();
+
+        Assert.Equal("localhost", options.AgentHost);
+        Assert.Equal(6831, options.AgentPort);
+        Assert.Equal(4096, options.MaxPayloadSizeInBytes);
+        Assert.Equal(ExportProcessorType.Batch, options.ExportProcessorType);
+        Assert.Equal(JaegerExportProtocol.UdpCompactThrift, options.Protocol);
+        Assert.Equal(JaegerExporterOptions.DefaultJaegerEndpoint, options.Endpoint.ToString());
+    }
+
+    [Fact]
+    public void JaegerExporterOptions_EnvironmentVariableOverride()
+    {
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentHostEnvVarKey, "jaeger-host");
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentPortEnvVarKey, "123");
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelProtocolEnvVarKey, "http/thrift.binary");
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelEndpointEnvVarKey, "http://custom-endpoint:12345");
+
+        var options = new JaegerExporterOptions();
+
+        Assert.Equal("jaeger-host", options.AgentHost);
+        Assert.Equal(123, options.AgentPort);
+        Assert.Equal(JaegerExportProtocol.HttpBinaryThrift, options.Protocol);
+        Assert.Equal(new Uri("http://custom-endpoint:12345"), options.Endpoint);
+    }
+
+    [Fact]
+    public void JaegerExporterOptions_InvalidEnvironmentVariableOverride()
+    {
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentPortEnvVarKey, "invalid");
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelProtocolEnvVarKey, "invalid");
+
+        var options = new JaegerExporterOptions();
+
+        Assert.Equal("localhost", options.AgentHost);
+        Assert.Equal(default(JaegerExportProtocol), options.Protocol);
+    }
+
+    [Fact]
+    public void JaegerExporterOptions_SetterOverridesEnvironmentVariable()
+    {
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentHostEnvVarKey, "envvar-host");
+
+        var options = new JaegerExporterOptions
         {
-            this.ClearEnvVars();
-        }
+            AgentHost = "incode-host",
+        };
 
-        public void Dispose()
+        Assert.Equal("incode-host", options.AgentHost);
+    }
+
+    [Fact]
+    public void JaegerExporterOptions_EnvironmentVariableNames()
+    {
+        Assert.Equal("OTEL_EXPORTER_JAEGER_PROTOCOL", JaegerExporterOptions.OTelProtocolEnvVarKey);
+        Assert.Equal("OTEL_EXPORTER_JAEGER_AGENT_HOST", JaegerExporterOptions.OTelAgentHostEnvVarKey);
+        Assert.Equal("OTEL_EXPORTER_JAEGER_AGENT_PORT", JaegerExporterOptions.OTelAgentPortEnvVarKey);
+        Assert.Equal("OTEL_EXPORTER_JAEGER_ENDPOINT", JaegerExporterOptions.OTelEndpointEnvVarKey);
+    }
+
+    [Fact]
+    public void JaegerExporterOptions_FromConfigurationTest()
+    {
+        var values = new Dictionary<string, string>()
         {
-            this.ClearEnvVars();
-        }
+            [JaegerExporterOptions.OTelProtocolEnvVarKey] = "http/thrift.binary",
+            [JaegerExporterOptions.OTelAgentHostEnvVarKey] = "jaeger-host",
+            [JaegerExporterOptions.OTelAgentPortEnvVarKey] = "123",
+            [JaegerExporterOptions.OTelEndpointEnvVarKey] = "http://custom-endpoint:12345",
+            ["OTEL_BSP_MAX_QUEUE_SIZE"] = "18",
+            ["OTEL_BSP_MAX_EXPORT_BATCH_SIZE"] = "2",
+            ["Jaeger:BatchExportProcessorOptions:MaxExportBatchSize"] = "5",
+        };
 
-        [Fact]
-        public void JaegerExporterOptions_Defaults()
-        {
-            var options = new JaegerExporterOptions();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
 
-            Assert.Equal("localhost", options.AgentHost);
-            Assert.Equal(6831, options.AgentPort);
-            Assert.Equal(4096, options.MaxPayloadSizeInBytes);
-            Assert.Equal(ExportProcessorType.Batch, options.ExportProcessorType);
-        }
+        IServiceCollection services = null;
 
-        [Fact]
-        public void JaegerExporterOptions_EnvironmentVariableOverride()
-        {
-            Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentHostEnvVarKey, "jeager-host");
-            Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentPortEnvVarKey, "123");
-
-            var options = new JaegerExporterOptions();
-
-            Assert.Equal("jeager-host", options.AgentHost);
-            Assert.Equal(123, options.AgentPort);
-        }
-
-        [Fact]
-        public void JaegerExporterOptions_InvalidPortEnvironmentVariableOverride()
-        {
-            Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentPortEnvVarKey, "invalid");
-
-            var options = new JaegerExporterOptions();
-
-            Assert.Equal(6831, options.AgentPort); // use default
-        }
-
-        [Fact]
-        public void JaegerExporterOptions_SetterOverridesEnvironmentVariable()
-        {
-            Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentHostEnvVarKey, "envvar-host");
-
-            var options = new JaegerExporterOptions
+        using var provider = Sdk.CreateTracerProviderBuilder()
+            .ConfigureServices(s =>
             {
-                AgentHost = "incode-host",
-            };
+                services = s;
+                services.AddSingleton<IConfiguration>(configuration);
+                services.Configure<JaegerExporterOptions>(configuration.GetSection("Jaeger"));
+            })
+            .AddJaegerExporter()
+            .Build();
 
-            Assert.Equal("incode-host", options.AgentHost);
-        }
+        Assert.NotNull(services);
 
-        [Fact]
-        public void JaegerExporterOptions_EnvironmentVariableNames()
-        {
-            Assert.Equal("OTEL_EXPORTER_JAEGER_AGENT_HOST", JaegerExporterOptions.OTelAgentHostEnvVarKey);
-            Assert.Equal("OTEL_EXPORTER_JAEGER_AGENT_PORT", JaegerExporterOptions.OTelAgentPortEnvVarKey);
-        }
+        using var serviceProvider = services.BuildServiceProvider();
 
-        private void ClearEnvVars()
-        {
-            Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentHostEnvVarKey, null);
-            Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentPortEnvVarKey, null);
-        }
+        var options = serviceProvider.GetRequiredService<IOptionsMonitor<JaegerExporterOptions>>().CurrentValue;
+
+        Assert.Equal("jaeger-host", options.AgentHost);
+        Assert.Equal(123, options.AgentPort);
+        Assert.Equal(JaegerExportProtocol.HttpBinaryThrift, options.Protocol);
+        Assert.Equal(new Uri("http://custom-endpoint:12345"), options.Endpoint);
+        Assert.Equal(18, options.BatchExportProcessorOptions.MaxQueueSize);
+
+        // Note:
+        //  1. OTEL_BSP_MAX_EXPORT_BATCH_SIZE is processed in BatchExportActivityProcessorOptions ctor and sets MaxExportBatchSize to 2.
+        //  2. Jaeger:BatchExportProcessorOptions:MaxExportBatchSize is processed by options binder after ctor and sets MaxExportBatchSize to 5.
+        Assert.Equal(5, options.BatchExportProcessorOptions.MaxExportBatchSize);
+    }
+
+    private static void ClearEnvVars()
+    {
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelProtocolEnvVarKey, null);
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentHostEnvVarKey, null);
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelAgentPortEnvVarKey, null);
+        Environment.SetEnvironmentVariable(JaegerExporterOptions.OTelEndpointEnvVarKey, null);
     }
 }

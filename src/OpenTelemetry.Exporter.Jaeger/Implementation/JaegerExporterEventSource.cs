@@ -14,55 +14,43 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Diagnostics.Tracing;
-using System.Security;
 using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Exporter.Jaeger.Implementation
+namespace OpenTelemetry.Exporter.Jaeger.Implementation;
+
+/// <summary>
+/// EventSource events emitted from the project.
+/// </summary>
+[EventSource(Name = "OpenTelemetry-Exporter-Jaeger")]
+internal sealed class JaegerExporterEventSource : EventSource
 {
-    /// <summary>
-    /// EventSource events emitted from the project.
-    /// </summary>
-    [EventSource(Name = "OpenTelemetry-Exporter-Jaeger")]
-    internal class JaegerExporterEventSource : EventSource
+    public static JaegerExporterEventSource Log = new();
+
+    [NonEvent]
+    public void FailedExport(Exception ex)
     {
-        public static JaegerExporterEventSource Log = new JaegerExporterEventSource();
-
-        [NonEvent]
-        public void FailedExport(Exception ex)
+        if (this.IsEnabled(EventLevel.Error, EventKeywords.All))
         {
-            if (this.IsEnabled(EventLevel.Error, EventKeywords.All))
-            {
-                this.FailedExport(ex.ToInvariantString());
-            }
+            this.FailedExport(ex.ToInvariantString());
         }
+    }
 
-        [NonEvent]
-        public void MissingPermissionsToReadEnvironmentVariable(SecurityException ex)
-        {
-            if (this.IsEnabled(EventLevel.Warning, EventKeywords.All))
-            {
-                this.MissingPermissionsToReadEnvironmentVariable(ex.ToInvariantString());
-            }
-        }
+    [Event(1, Message = "Failed to send spans: '{0}'", Level = EventLevel.Error)]
+    public void FailedExport(string exception)
+    {
+        this.WriteEvent(1, exception);
+    }
 
-        [Event(1, Message = "Failed to send spans: '{0}'", Level = EventLevel.Error)]
-        public void FailedExport(string exception)
-        {
-            this.WriteEvent(1, exception);
-        }
+    [Event(2, Message = "Unsupported attribute type '{0}' for '{1}'. Attribute will not be exported.", Level = EventLevel.Warning)]
+    public void UnsupportedAttributeType(string type, string key)
+    {
+        this.WriteEvent(2, type.ToString(), key);
+    }
 
-        [Event(2, Message = "Failed to parse environment variable: '{0}', value: '{1}'.", Level = EventLevel.Warning)]
-        public void FailedToParseEnvironmentVariable(string name, string value)
-        {
-            this.WriteEvent(2, name, value);
-        }
-
-        [Event(3, Message = "Missing permissions to read environment variable: '{0}'", Level = EventLevel.Warning)]
-        public void MissingPermissionsToReadEnvironmentVariable(string exception)
-        {
-            this.WriteEvent(3, exception);
-        }
+    [Event(3, Message = "{0} environment variable has an invalid value: '{1}'", Level = EventLevel.Warning)]
+    public void InvalidEnvironmentVariable(string key, string value)
+    {
+        this.WriteEvent(3, key, value);
     }
 }

@@ -14,31 +14,29 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using Xunit;
 
-namespace OpenTelemetry.Tests
+namespace OpenTelemetry.Tests;
+
+internal class SkipUnlessEnvVarFoundFactAttribute : FactAttribute
 {
-    internal class SkipUnlessEnvVarFoundFactAttribute : FactAttribute
+    public SkipUnlessEnvVarFoundFactAttribute(string environmentVariable)
     {
-        public SkipUnlessEnvVarFoundFactAttribute(string environmentVariable)
+        if (string.IsNullOrEmpty(GetEnvironmentVariable(environmentVariable)))
         {
-            if (string.IsNullOrEmpty(GetEnvironmentVariable(environmentVariable)))
-            {
-                this.Skip = $"Skipped because {environmentVariable} environment variable was not configured.";
-            }
+            this.Skip = $"Skipped because {environmentVariable} environment variable was not configured.";
+        }
+    }
+
+    public static string GetEnvironmentVariable(string environmentVariableName)
+    {
+        string environmentVariableValue = Environment.GetEnvironmentVariable(environmentVariableName, EnvironmentVariableTarget.Process);
+
+        if (string.IsNullOrEmpty(environmentVariableValue))
+        {
+            environmentVariableValue = Environment.GetEnvironmentVariable(environmentVariableName, EnvironmentVariableTarget.Machine);
         }
 
-        public static string GetEnvironmentVariable(string environmentVariableName)
-        {
-            string environmentVariableValue = Environment.GetEnvironmentVariable(environmentVariableName, EnvironmentVariableTarget.Process);
-
-            if (string.IsNullOrEmpty(environmentVariableValue))
-            {
-                environmentVariableValue = Environment.GetEnvironmentVariable(environmentVariableName, EnvironmentVariableTarget.Machine);
-            }
-
-            return environmentVariableValue;
-        }
+        return environmentVariableValue;
     }
 }

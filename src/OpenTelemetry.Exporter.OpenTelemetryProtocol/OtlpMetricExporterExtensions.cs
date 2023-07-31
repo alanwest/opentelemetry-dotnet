@@ -14,48 +14,182 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Metrics
+namespace OpenTelemetry.Metrics;
+
+/// <summary>
+/// Extension methods to simplify registering of the OpenTelemetry Protocol (OTLP) exporter.
+/// </summary>
+public static class OtlpMetricExporterExtensions
 {
+    internal const string OtlpMetricExporterTemporalityPreferenceEnvVarKey = "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE";
+
     /// <summary>
-    /// Extension methods to simplify registering of the OpenTelemetry Protocol (OTLP) exporter.
+    /// Adds <see cref="OtlpMetricExporter"/> to the <see cref="MeterProviderBuilder"/> using default options.
     /// </summary>
-    public static class OtlpMetricExporterExtensions
+    /// <param name="builder"><see cref="MeterProviderBuilder"/> builder to use.</param>
+    /// <returns>The instance of <see cref="MeterProviderBuilder"/> to chain the calls.</returns>
+    public static MeterProviderBuilder AddOtlpExporter(this MeterProviderBuilder builder)
+        => AddOtlpExporter(builder, name: null, configureExporter: null);
+
+    /// <summary>
+    /// Adds <see cref="OtlpMetricExporter"/> to the <see cref="MeterProviderBuilder"/>.
+    /// </summary>
+    /// <param name="builder"><see cref="MeterProviderBuilder"/> builder to use.</param>
+    /// <param name="configureExporter">Callback action for configuring <see cref="OtlpExporterOptions"/>.</param>
+    /// <returns>The instance of <see cref="MeterProviderBuilder"/> to chain the calls.</returns>
+    public static MeterProviderBuilder AddOtlpExporter(this MeterProviderBuilder builder, Action<OtlpExporterOptions> configureExporter)
+        => AddOtlpExporter(builder, name: null, configureExporter);
+
+    /// <summary>
+    /// Adds <see cref="OtlpMetricExporter"/> to the <see cref="MeterProviderBuilder"/>.
+    /// </summary>
+    /// <param name="builder"><see cref="MeterProviderBuilder"/> builder to use.</param>
+    /// <param name="name">Name which is used when retrieving options.</param>
+    /// <param name="configureExporter">Callback action for configuring <see cref="OtlpExporterOptions"/>.</param>
+    /// <returns>The instance of <see cref="MeterProviderBuilder"/> to chain the calls.</returns>
+    public static MeterProviderBuilder AddOtlpExporter(
+        this MeterProviderBuilder builder,
+        string name,
+        Action<OtlpExporterOptions> configureExporter)
     {
-        /// <summary>
-        /// Adds <see cref="OtlpMetricExporter"/> to the <see cref="MeterProviderBuilder"/>.
-        /// </summary>
-        /// <param name="builder"><see cref="MeterProviderBuilder"/> builder to use.</param>
-        /// <param name="configure">Exporter configuration options.</param>
-        /// <returns>The instance of <see cref="MeterProviderBuilder"/> to chain the calls.</returns>
-        public static MeterProviderBuilder AddOtlpExporter(this MeterProviderBuilder builder, Action<OtlpExporterOptions> configure = null)
+        Guard.ThrowIfNull(builder);
+
+        var finalOptionsName = name ?? Options.DefaultName;
+
+        builder.ConfigureServices(services =>
         {
-            if (builder == null)
+            if (name != null && configureExporter != null)
             {
-                throw new ArgumentNullException(nameof(builder));
+                // If we are using named options we register the
+                // configuration delegate into options pipeline.
+                services.Configure(finalOptionsName, configureExporter);
             }
 
-            if (builder is IDeferredMeterProviderBuilder deferredMeterProviderBuilder)
-            {
-                return deferredMeterProviderBuilder.Configure((sp, builder) =>
+            OtlpExporterOptions.RegisterOtlpExporterOptionsFactory(services);
+
+            services.AddOptions<MetricReaderOptions>(finalOptionsName).Configure<IConfiguration>(
+                (readerOptions, config) =>
                 {
-                    AddOtlpExporter(builder, sp.GetOptions<OtlpExporterOptions>(), configure);
+                    var otlpTemporalityPreference = config[OtlpMetricExporterTemporalityPreferenceEnvVarKey];
+                    if (!string.IsNullOrWhiteSpace(otlpTemporalityPreference)
+                        && Enum.TryParse<MetricReaderTemporalityPreference>(otlpTemporalityPreference, ignoreCase: true, out var enumValue))
+                    {
+                        readerOptions.TemporalityPreference = enumValue;
+                    }
                 });
+        });
+
+        return builder.AddReader(sp =>
+        {
+            OtlpExporterOptions exporterOptions;
+
+            if (name == null)
+            {
+                // If we are NOT using named options we create a new
+                // instance always. The reason for this is
+                // OtlpExporterOptions is shared by all signals. Without a
+                // name, delegates for all signals will mix together. See:
+                // https://github.com/open-telemetry/opentelemetry-dotnet/issues/4043
+                exporterOptions = sp.GetRequiredService<IOptionsFactory<OtlpExporterOptions>>().Create(finalOptionsName);
+
+                // Configuration delegate is executed inline on the fresh instance.
+                configureExporter?.Invoke(exporterOptions);
+            }
+            else
+            {
+                // When using named options we can properly utilize Options
+                // API to create or reuse an instance.
+                exporterOptions = sp.GetRequiredService<IOptionsMonitor<OtlpExporterOptions>>().Get(finalOptionsName);
             }
 
-            return AddOtlpExporter(builder, new OtlpExporterOptions(), configure);
-        }
+            return BuildOtlpExporterMetricReader(
+                exporterOptions,
+                sp.GetRequiredService<IOptionsMonitor<MetricReaderOptions>>().Get(finalOptionsName),
+                sp);
+        });
+    }
 
-        private static MeterProviderBuilder AddOtlpExporter(MeterProviderBuilder builder, OtlpExporterOptions options, Action<OtlpExporterOptions> configure = null)
+    /// <summary>
+    /// Adds <see cref="OtlpMetricExporter"/> to the <see cref="MeterProviderBuilder"/>.
+    /// </summary>
+    /// <param name="builder"><see cref="MeterProviderBuilder"/> builder to use.</param>
+    /// <param name="configureExporterAndMetricReader">Callback action for
+    /// configuring <see cref="OtlpExporterOptions"/> and <see
+    /// cref="MetricReaderOptions"/>.</param>
+    /// <returns>The instance of <see cref="MeterProviderBuilder"/> to chain the calls.</returns>
+    public static MeterProviderBuilder AddOtlpExporter(
+        this MeterProviderBuilder builder,
+        Action<OtlpExporterOptions, MetricReaderOptions> configureExporterAndMetricReader)
+        => AddOtlpExporter(builder, name: null, configureExporterAndMetricReader);
+
+    /// <summary>
+    /// Adds <see cref="OtlpMetricExporter"/> to the <see cref="MeterProviderBuilder"/>.
+    /// </summary>
+    /// <param name="builder"><see cref="MeterProviderBuilder"/> builder to use.</param>
+    /// <param name="name">Name which is used when retrieving options.</param>
+    /// <param name="configureExporterAndMetricReader">Callback action for
+    /// configuring <see cref="OtlpExporterOptions"/> and <see
+    /// cref="MetricReaderOptions"/>.</param>
+    /// <returns>The instance of <see cref="MeterProviderBuilder"/> to chain the calls.</returns>
+    public static MeterProviderBuilder AddOtlpExporter(
+        this MeterProviderBuilder builder,
+        string name,
+        Action<OtlpExporterOptions, MetricReaderOptions> configureExporterAndMetricReader)
+    {
+        Guard.ThrowIfNull(builder);
+
+        name ??= Options.DefaultName;
+
+        builder.ConfigureServices(services =>
         {
-            configure?.Invoke(options);
+            OtlpExporterOptions.RegisterOtlpExporterOptionsFactory(services);
 
-            var metricExporter = new OtlpMetricExporter(options);
-            var metricReader = new PeriodicExportingMetricReader(metricExporter, options.MetricExportIntervalMilliseconds);
-            metricReader.PreferredAggregationTemporality = options.AggregationTemporality;
-            return builder.AddReader(metricReader);
+            services.AddOptions<MetricReaderOptions>(name).Configure<IConfiguration>(
+                (readerOptions, config) =>
+                {
+                    var otlpTemporalityPreference = config[OtlpMetricExporterTemporalityPreferenceEnvVarKey];
+                    if (!string.IsNullOrWhiteSpace(otlpTemporalityPreference)
+                        && Enum.TryParse<MetricReaderTemporalityPreference>(otlpTemporalityPreference, ignoreCase: true, out var enumValue))
+                    {
+                        readerOptions.TemporalityPreference = enumValue;
+                    }
+                });
+        });
+
+        return builder.AddReader(sp =>
+        {
+            var exporterOptions = sp.GetRequiredService<IOptionsMonitor<OtlpExporterOptions>>().Get(name);
+            var metricReaderOptions = sp.GetRequiredService<IOptionsMonitor<MetricReaderOptions>>().Get(name);
+
+            configureExporterAndMetricReader?.Invoke(exporterOptions, metricReaderOptions);
+
+            return BuildOtlpExporterMetricReader(exporterOptions, metricReaderOptions, sp);
+        });
+    }
+
+    internal static MetricReader BuildOtlpExporterMetricReader(
+        OtlpExporterOptions exporterOptions,
+        MetricReaderOptions metricReaderOptions,
+        IServiceProvider serviceProvider,
+        Func<BaseExporter<Metric>, BaseExporter<Metric>> configureExporterInstance = null)
+    {
+        exporterOptions.TryEnableIHttpClientFactoryIntegration(serviceProvider, "OtlpMetricExporter");
+
+        BaseExporter<Metric> metricExporter = new OtlpMetricExporter(exporterOptions);
+
+        if (configureExporterInstance != null)
+        {
+            metricExporter = configureExporterInstance(metricExporter);
         }
+
+        return PeriodicExportingMetricReaderHelper.CreatePeriodicExportingMetricReader(
+            metricExporter,
+            metricReaderOptions);
     }
 }

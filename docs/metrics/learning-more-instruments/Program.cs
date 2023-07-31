@@ -14,28 +14,28 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 
+namespace LearningMoreInstruments;
+
 public class Program
 {
-    private static readonly Meter MyMeter = new Meter("MyCompany.MyProduct.MyLibrary", "1.0");
+    private static readonly Meter MyMeter = new("MyCompany.MyProduct.MyLibrary", "1.0");
     private static readonly Histogram<long> MyHistogram = MyMeter.CreateHistogram<long>("MyHistogram");
 
     static Program()
     {
         var process = Process.GetCurrentProcess();
 
-        MyMeter.CreateObservableCounter<double>("Thread.CpuTime", () => GetThreadCpuTime(process), "seconds");
+        MyMeter.CreateObservableCounter("Thread.CpuTime", () => GetThreadCpuTime(process), "ms");
 
-        MyMeter.CreateObservableGauge<int>("Thread.State", () => GetThreadState(process));
+        MyMeter.CreateObservableGauge("Thread.State", () => GetThreadState(process));
     }
 
-    public static void Main(string[] args)
+    public static void Main()
     {
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
             .AddMeter("MyCompany.MyProduct.MyLibrary")

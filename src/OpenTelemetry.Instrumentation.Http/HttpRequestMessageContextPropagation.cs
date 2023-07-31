@@ -14,27 +14,27 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Collections.Generic;
+#if NETFRAMEWORK
 using System.Net.Http;
+#endif
 
-namespace OpenTelemetry.Instrumentation.Http
+namespace OpenTelemetry.Instrumentation.Http;
+
+internal static class HttpRequestMessageContextPropagation
 {
-    internal static class HttpRequestMessageContextPropagation
+    internal static Func<HttpRequestMessage, string, IEnumerable<string>> HeaderValuesGetter => (request, name) =>
     {
-        internal static Func<HttpRequestMessage, string, IEnumerable<string>> HeaderValuesGetter => (request, name) =>
+        if (request.Headers.TryGetValues(name, out var values))
         {
-            if (request.Headers.TryGetValues(name, out var values))
-            {
-                return values;
-            }
+            return values;
+        }
 
-            return null;
-        };
+        return null;
+    };
 
-        internal static Action<HttpRequestMessage, string, string> HeaderValueSetter => (request, name, value) =>
-        {
-            request.Headers.Add(name, value);
-        };
-    }
+    internal static Action<HttpRequestMessage, string, string> HeaderValueSetter => (request, name, value) =>
+    {
+        request.Headers.Remove(name);
+        request.Headers.Add(name, value);
+    };
 }

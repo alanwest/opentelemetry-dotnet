@@ -14,38 +14,34 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Diagnostics;
 using OpenTelemetry;
 
-internal class MyFilteringProcessor : BaseProcessor<Activity>
+/// <summary>
+/// A custom processor for filtering <see cref="Activity"/> instances.
+/// </summary>
+internal sealed class MyFilteringProcessor : BaseProcessor<Activity>
 {
     private readonly Func<Activity, bool> filter;
-    private readonly BaseProcessor<Activity> processor;
 
-    public MyFilteringProcessor(BaseProcessor<Activity> processor, Func<Activity, bool> filter)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MyFilteringProcessor"/>
+    /// class.
+    /// </summary>
+    /// <param name="filter">Function used to test if an <see cref="Activity"/>
+    /// should be recorded or dropped. Return <see langword="true"/> to record
+    /// or <see langword="false"/> to drop.</param>
+    public MyFilteringProcessor(Func<Activity, bool> filter)
     {
-        if (filter == null)
-        {
-            throw new ArgumentNullException(nameof(filter));
-        }
-
-        if (processor == null)
-        {
-            throw new ArgumentNullException(nameof(processor));
-        }
-
-        this.filter = filter;
-        this.processor = processor;
+        this.filter = filter ?? throw new ArgumentNullException(nameof(filter));
     }
 
     public override void OnEnd(Activity activity)
     {
-        // Call the underlying processor
-        // only if the Filter returns true.
-        if (this.filter(activity))
+        // Bypass export if the Filter returns false.
+        if (!this.filter(activity))
         {
-            this.processor.OnEnd(activity);
+            activity.ActivityTraceFlags &= ~ActivityTraceFlags.Recorded;
         }
     }
 }

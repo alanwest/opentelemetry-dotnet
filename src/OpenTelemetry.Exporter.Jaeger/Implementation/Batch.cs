@@ -14,96 +14,69 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Runtime.CompilerServices;
-using System.Text;
-using OpenTelemetry.Internal;
 using Thrift.Protocol;
 using Thrift.Protocol.Entities;
 
-namespace OpenTelemetry.Exporter.Jaeger.Implementation
+namespace OpenTelemetry.Exporter.Jaeger.Implementation;
+
+internal sealed class Batch
 {
-    internal class Batch
+    public Batch(Process process, TProtocol protocol)
     {
-        private PooledList<BufferWriterMemory> spanMessages;
+        this.BatchBeginMessage = GenerateBeginMessage(process, protocol, out int spanCountPosition);
+        this.SpanCountPosition = spanCountPosition;
+        this.BatchEndMessage = GenerateEndMessage(protocol);
+    }
 
-        public Batch(Process process)
+    public byte[] BatchBeginMessage { get; }
+
+    public int SpanCountPosition { get; set; }
+
+    public byte[] BatchEndMessage { get; }
+
+    public int MinimumMessageSize => this.BatchBeginMessage.Length
+        + this.BatchEndMessage.Length;
+
+    private static byte[] GenerateBeginMessage(Process process, TProtocol oprot, out int spanCountPosition)
+    {
+        var struc = new TStruct("Batch");
+
+        oprot.WriteStructBegin(struc);
+
+        var field = new TField
         {
-            this.Process = process ?? throw new ArgumentNullException(nameof(process));
-            this.spanMessages = PooledList<BufferWriterMemory>.Create();
-        }
+            Name = "process",
+            Type = TType.Struct,
+            ID = 1,
+        };
 
-        public Process Process { get; }
+        oprot.WriteFieldBegin(field);
+        process.Write(oprot);
+        oprot.WriteFieldEnd();
 
-        public int Count => this.spanMessages.Count;
+        field.Name = "spans";
+        field.Type = TType.List;
+        field.ID = 2;
 
-        public override string ToString()
-        {
-            var sb = new StringBuilder("Batch(");
-            sb.Append(", Process: ");
-            sb.Append(this.Process?.ToString() ?? "<null>");
-            sb.Append(", Spans: ");
-            sb.Append(this.spanMessages);
-            sb.Append(')');
-            return sb.ToString();
-        }
+        oprot.WriteFieldBegin(field);
 
-        internal void Write(TProtocol oprot)
-        {
-            oprot.IncrementRecursionDepth();
-            try
-            {
-                var struc = new TStruct("Batch");
+        oprot.WriteListBegin(new TList(TType.Struct, 0), out spanCountPosition);
 
-                oprot.WriteStructBegin(struc);
+        byte[] beginMessage = oprot.WrittenData.ToArray();
+        oprot.Clear();
+        return beginMessage;
+    }
 
-                var field = new TField
-                {
-                    Name = "process",
-                    Type = TType.Struct,
-                    ID = 1,
-                };
+    private static byte[] GenerateEndMessage(TProtocol oprot)
+    {
+        oprot.WriteListEnd();
 
-                oprot.WriteFieldBegin(field);
-                oprot.Transport.Write(this.Process.Message);
-                oprot.WriteFieldEnd();
+        oprot.WriteFieldEnd();
+        oprot.WriteFieldStop();
+        oprot.WriteStructEnd();
 
-                field.Name = "spans";
-                field.Type = TType.List;
-                field.ID = 2;
-
-                oprot.WriteFieldBegin(field);
-                {
-                    oprot.WriteListBegin(new TList(TType.Struct, this.spanMessages.Count));
-
-                    foreach (var s in this.spanMessages)
-                    {
-                        oprot.Transport.Write(s.BufferWriter.Buffer, s.Offset, s.Count);
-                    }
-
-                    oprot.WriteListEnd();
-                }
-
-                oprot.WriteFieldEnd();
-                oprot.WriteFieldStop();
-                oprot.WriteStructEnd();
-            }
-            finally
-            {
-                oprot.DecrementRecursionDepth();
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void Add(BufferWriterMemory spanMessage)
-        {
-            PooledList<BufferWriterMemory>.Add(ref this.spanMessages, spanMessage);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void Clear()
-        {
-            PooledList<BufferWriterMemory>.Clear(ref this.spanMessages);
-        }
+        byte[] endMessage = oprot.WrittenData.ToArray();
+        oprot.Clear();
+        return endMessage;
     }
 }

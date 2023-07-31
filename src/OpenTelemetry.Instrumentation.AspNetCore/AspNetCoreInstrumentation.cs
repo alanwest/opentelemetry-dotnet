@@ -13,28 +13,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 // </copyright>
-using System;
 using OpenTelemetry.Instrumentation.AspNetCore.Implementation;
 
-namespace OpenTelemetry.Instrumentation.AspNetCore
+namespace OpenTelemetry.Instrumentation.AspNetCore;
+
+/// <summary>
+/// Asp.Net Core Requests instrumentation.
+/// </summary>
+internal sealed class AspNetCoreInstrumentation : IDisposable
 {
-    /// <summary>
-    /// Asp.Net Core Requests instrumentation.
-    /// </summary>
-    internal class AspNetCoreInstrumentation : IDisposable
+    private static readonly HashSet<string> DiagnosticSourceEvents = new()
     {
-        private readonly DiagnosticSourceSubscriber diagnosticSourceSubscriber;
+        "Microsoft.AspNetCore.Hosting.HttpRequestIn",
+        "Microsoft.AspNetCore.Hosting.HttpRequestIn.Start",
+        "Microsoft.AspNetCore.Hosting.HttpRequestIn.Stop",
+        "Microsoft.AspNetCore.Mvc.BeforeAction",
+        "Microsoft.AspNetCore.Diagnostics.UnhandledException",
+        "Microsoft.AspNetCore.Hosting.UnhandledException",
+    };
 
-        public AspNetCoreInstrumentation(HttpInListener httpInListener)
-        {
-            this.diagnosticSourceSubscriber = new DiagnosticSourceSubscriber(httpInListener, null);
-            this.diagnosticSourceSubscriber.Subscribe();
-        }
+    private readonly Func<string, object, object, bool> isEnabled = (eventName, _, _)
+        => DiagnosticSourceEvents.Contains(eventName);
 
-        /// <inheritdoc/>
-        public void Dispose()
-        {
-            this.diagnosticSourceSubscriber?.Dispose();
-        }
+    private readonly DiagnosticSourceSubscriber diagnosticSourceSubscriber;
+
+    public AspNetCoreInstrumentation(HttpInListener httpInListener)
+    {
+        this.diagnosticSourceSubscriber = new DiagnosticSourceSubscriber(httpInListener, this.isEnabled, AspNetCoreInstrumentationEventSource.Log.UnknownErrorProcessingEvent);
+        this.diagnosticSourceSubscriber.Subscribe();
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        this.diagnosticSourceSubscriber?.Dispose();
     }
 }

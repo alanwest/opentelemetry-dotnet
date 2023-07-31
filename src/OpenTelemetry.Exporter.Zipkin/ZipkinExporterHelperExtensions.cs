@@ -14,60 +14,123 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+#if NETFRAMEWORK
+using System.Net.Http;
+#endif
+using System.Diagnostics;
+using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Trace
+namespace OpenTelemetry.Trace;
+
+/// <summary>
+/// Extension methods to simplify registering of Zipkin exporter.
+/// </summary>
+public static class ZipkinExporterHelperExtensions
 {
     /// <summary>
-    /// Extension methods to simplify registering of Zipkin exporter.
+    /// Adds Zipkin exporter to the TracerProvider.
     /// </summary>
-    public static class ZipkinExporterHelperExtensions
+    /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
+    /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
+    public static TracerProviderBuilder AddZipkinExporter(this TracerProviderBuilder builder)
+        => AddZipkinExporter(builder, name: null, configure: null);
+
+    /// <summary>
+    /// Adds Zipkin exporter to the TracerProvider.
+    /// </summary>
+    /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
+    /// <param name="configure">Callback action for configuring <see cref="ZipkinExporterOptions"/>.</param>
+    /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
+    public static TracerProviderBuilder AddZipkinExporter(this TracerProviderBuilder builder, Action<ZipkinExporterOptions> configure)
+        => AddZipkinExporter(builder, name: null, configure);
+
+    /// <summary>
+    /// Adds Zipkin exporter to the TracerProvider.
+    /// </summary>
+    /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
+    /// <param name="name">Name which is used when retrieving options.</param>
+    /// <param name="configure">Callback action for configuring <see cref="ZipkinExporterOptions"/>.</param>
+    /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
+    public static TracerProviderBuilder AddZipkinExporter(
+        this TracerProviderBuilder builder,
+        string name,
+        Action<ZipkinExporterOptions> configure)
     {
-        /// <summary>
-        /// Adds Zipkin exporter to the TracerProvider.
-        /// </summary>
-        /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
-        /// <param name="configure">Exporter configuration options.</param>
-        /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The objects should not be disposed.")]
-        public static TracerProviderBuilder AddZipkinExporter(this TracerProviderBuilder builder, Action<ZipkinExporterOptions> configure = null)
+        Guard.ThrowIfNull(builder);
+
+        name ??= Options.DefaultName;
+
+        builder.ConfigureServices(services =>
         {
-            if (builder == null)
+            if (configure != null)
             {
-                throw new ArgumentNullException(nameof(builder));
+                services.Configure(name, configure);
             }
 
-            if (builder is IDeferredTracerProviderBuilder deferredTracerProviderBuilder)
+            services.RegisterOptionsFactory(
+                (sp, configuration, name) => new ZipkinExporterOptions(
+                    configuration,
+                    sp.GetRequiredService<IOptionsMonitor<BatchExportActivityProcessorOptions>>().Get(name)));
+        });
+
+        return builder.AddProcessor(sp =>
+        {
+            var options = sp.GetRequiredService<IOptionsMonitor<ZipkinExporterOptions>>().Get(name);
+
+            return BuildZipkinExporterProcessor(builder, options, sp);
+        });
+    }
+
+    private static BaseProcessor<Activity> BuildZipkinExporterProcessor(
+        TracerProviderBuilder builder,
+        ZipkinExporterOptions options,
+        IServiceProvider serviceProvider)
+    {
+        if (options.HttpClientFactory == ZipkinExporterOptions.DefaultHttpClientFactory)
+        {
+            options.HttpClientFactory = () =>
             {
-                return deferredTracerProviderBuilder.Configure((sp, builder) =>
+                Type httpClientFactoryType = Type.GetType("System.Net.Http.IHttpClientFactory, Microsoft.Extensions.Http", throwOnError: false);
+                if (httpClientFactoryType != null)
                 {
-                    AddZipkinExporter(builder, sp.GetOptions<ZipkinExporterOptions>(), configure);
-                });
-            }
+                    object httpClientFactory = serviceProvider.GetService(httpClientFactoryType);
+                    if (httpClientFactory != null)
+                    {
+                        MethodInfo createClientMethod = httpClientFactoryType.GetMethod(
+                            "CreateClient",
+                            BindingFlags.Public | BindingFlags.Instance,
+                            binder: null,
+                            new Type[] { typeof(string) },
+                            modifiers: null);
+                        if (createClientMethod != null)
+                        {
+                            return (HttpClient)createClientMethod.Invoke(httpClientFactory, new object[] { "ZipkinExporter" });
+                        }
+                    }
+                }
 
-            return AddZipkinExporter(builder, new ZipkinExporterOptions(), configure);
+                return new HttpClient();
+            };
         }
 
-        private static TracerProviderBuilder AddZipkinExporter(TracerProviderBuilder builder, ZipkinExporterOptions options, Action<ZipkinExporterOptions> configure = null)
+        var zipkinExporter = new ZipkinExporter(options);
+
+        if (options.ExportProcessorType == ExportProcessorType.Simple)
         {
-            configure?.Invoke(options);
-
-            var zipkinExporter = new ZipkinExporter(options);
-
-            if (options.ExportProcessorType == ExportProcessorType.Simple)
-            {
-                return builder.AddProcessor(new SimpleActivityExportProcessor(zipkinExporter));
-            }
-            else
-            {
-                return builder.AddProcessor(new BatchActivityExportProcessor(
-                    zipkinExporter,
-                    options.BatchExportProcessorOptions.MaxQueueSize,
-                    options.BatchExportProcessorOptions.ScheduledDelayMilliseconds,
-                    options.BatchExportProcessorOptions.ExporterTimeoutMilliseconds,
-                    options.BatchExportProcessorOptions.MaxExportBatchSize));
-            }
+            return new SimpleActivityExportProcessor(zipkinExporter);
+        }
+        else
+        {
+            return new BatchActivityExportProcessor(
+                zipkinExporter,
+                options.BatchExportProcessorOptions.MaxQueueSize,
+                options.BatchExportProcessorOptions.ScheduledDelayMilliseconds,
+                options.BatchExportProcessorOptions.ExporterTimeoutMilliseconds,
+                options.BatchExportProcessorOptions.MaxExportBatchSize);
         }
     }
 }

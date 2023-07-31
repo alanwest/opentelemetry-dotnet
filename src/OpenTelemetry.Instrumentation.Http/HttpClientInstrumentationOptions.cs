@@ -14,73 +14,182 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Diagnostics;
+using System.Net;
+#if NETFRAMEWORK
 using System.Net.Http;
+#endif
 using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Configuration;
 using OpenTelemetry.Instrumentation.Http.Implementation;
-using OpenTelemetry.Trace;
+using static OpenTelemetry.Internal.HttpSemanticConventionHelper;
 
-namespace OpenTelemetry.Instrumentation.Http
+namespace OpenTelemetry.Instrumentation.Http;
+
+/// <summary>
+/// Options for HttpClient instrumentation.
+/// </summary>
+public class HttpClientInstrumentationOptions
 {
+    internal readonly HttpSemanticConvention HttpSemanticConvention;
+
     /// <summary>
-    /// Options for HttpClient instrumentation.
+    /// Initializes a new instance of the <see cref="HttpClientInstrumentationOptions"/> class.
     /// </summary>
-    public class HttpClientInstrumentationOptions
+    public HttpClientInstrumentationOptions()
+        : this(new ConfigurationBuilder().AddEnvironmentVariables().Build())
     {
-        /// <summary>
-        /// Gets or sets a value indicating whether or not the HTTP version should be added as the <see cref="SemanticConventions.AttributeHttpFlavor"/> tag. Default value: False.
-        /// </summary>
-        public bool SetHttpFlavor { get; set; }
+    }
 
-        /// <summary>
-        /// Gets or sets a Filter function that determines whether or not to collect telemetry about requests on a per request basis.
-        /// The Filter gets the HttpRequestMessage, and should return a boolean.
-        /// If Filter returns true, the request is collected.
-        /// If Filter returns false or throw exception, the request is filtered out.
-        /// </summary>
-        public Func<HttpRequestMessage, bool> Filter { get; set; }
+    internal HttpClientInstrumentationOptions(IConfiguration configuration)
+    {
+        Debug.Assert(configuration != null, "configuration was null");
 
-        /// <summary>
-        /// Gets or sets an action to enrich an Activity.
-        /// </summary>
-        /// <remarks>
-        /// <para><see cref="Activity"/>: the activity being enriched.</para>
-        /// <para>string: the name of the event.</para>
-        /// <para>object: the raw object from which additional information can be extracted to enrich the activity.
-        /// The type of this object depends on the event, which is given by the above parameter.</para>
-        /// </remarks>
-        public Action<Activity, string, object> Enrich { get; set; }
+        this.HttpSemanticConvention = GetSemanticConventionOptIn(configuration);
+    }
 
-        /// <summary>
-        /// Gets or sets a value indicating whether exception will be recorded as ActivityEvent or not.
-        /// </summary>
-        /// <remarks>
-        /// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/exceptions.md.
-        /// </remarks>
-        public bool RecordException { get; set; }
+    /// <summary>
+    /// Gets or sets a filter function that determines whether or not to
+    /// collect telemetry on a per request basis.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>FilterHttpRequestMessage is only executed on .NET and .NET
+    /// Core runtimes. <see cref="HttpClient"/> and <see
+    /// cref="HttpWebRequest"/> on .NET and .NET Core are both implemented
+    /// using <see cref="HttpRequestMessage"/>.</b></para>
+    /// Notes:
+    /// <list type="bullet">
+    /// <item>The return value for the filter function is interpreted as:
+    /// <list type="bullet">
+    /// <item>If filter returns <see langword="true" />, the request is
+    /// collected.</item>
+    /// <item>If filter returns <see langword="false" /> or throws an
+    /// exception the request is NOT collected.</item>
+    /// </list></item>
+    /// </list>
+    /// </remarks>
+    public Func<HttpRequestMessage, bool> FilterHttpRequestMessage { get; set; }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal bool EventFilter(string activityName, object arg1)
+    /// <summary>
+    /// Gets or sets an action to enrich an <see cref="Activity"/> with <see cref="HttpRequestMessage"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>EnrichWithHttpRequestMessage is only executed on .NET and .NET
+    /// Core runtimes. <see cref="HttpClient"/> and <see
+    /// cref="HttpWebRequest"/> on .NET and .NET Core are both implemented
+    /// using <see cref="HttpRequestMessage"/>.</b></para>
+    /// </remarks>
+    public Action<Activity, HttpRequestMessage> EnrichWithHttpRequestMessage { get; set; }
+
+    /// <summary>
+    /// Gets or sets an action to enrich an <see cref="Activity"/> with <see cref="HttpResponseMessage"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>EnrichWithHttpResponseMessage is only executed on .NET and .NET
+    /// Core runtimes. <see cref="HttpClient"/> and <see
+    /// cref="HttpWebRequest"/> on .NET and .NET Core are both implemented
+    /// using <see cref="HttpRequestMessage"/>.</b></para>
+    /// </remarks>
+    public Action<Activity, HttpResponseMessage> EnrichWithHttpResponseMessage { get; set; }
+
+    /// <summary>
+    /// Gets or sets an action to enrich an <see cref="Activity"/> with <see cref="Exception"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>EnrichWithException is called for all runtimes.</b></para>
+    /// </remarks>
+    public Action<Activity, Exception> EnrichWithException { get; set; }
+
+    /// <summary>
+    /// Gets or sets a filter function that determines whether or not to
+    /// collect telemetry on a per request basis.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>FilterHttpWebRequest is only executed on .NET Framework
+    /// runtimes. <see cref="HttpClient"/> and <see cref="HttpWebRequest"/>
+    /// on .NET Framework are both implemented using <see
+    /// cref="HttpWebRequest"/>.</b></para>
+    /// Notes:
+    /// <list type="bullet">
+    /// <item>The return value for the filter function is interpreted as:
+    /// <list type="bullet">
+    /// <item>If filter returns <see langword="true" />, the request is
+    /// collected.</item>
+    /// <item>If filter returns <see langword="false" /> or throws an
+    /// exception the request is NOT collected.</item>
+    /// </list></item>
+    /// </list>
+    /// </remarks>
+    public Func<HttpWebRequest, bool> FilterHttpWebRequest { get; set; }
+
+    /// <summary>
+    /// Gets or sets an action to enrich an <see cref="Activity"/> with <see cref="HttpWebRequest"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>EnrichWithHttpWebRequest is only executed on .NET Framework
+    /// runtimes. <see cref="HttpClient"/> and <see cref="HttpWebRequest"/>
+    /// on .NET Framework are both implemented using <see
+    /// cref="HttpWebRequest"/>.</b></para>
+    /// </remarks>
+    public Action<Activity, HttpWebRequest> EnrichWithHttpWebRequest { get; set; }
+
+    /// <summary>
+    /// Gets or sets an action to enrich an <see cref="Activity"/> with <see cref="HttpWebResponse"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>EnrichWithHttpWebResponse is only executed on .NET Framework
+    /// runtimes. <see cref="HttpClient"/> and <see cref="HttpWebRequest"/>
+    /// on .NET Framework are both implemented using <see
+    /// cref="HttpWebRequest"/>.</b></para>
+    /// </remarks>
+    public Action<Activity, HttpWebResponse> EnrichWithHttpWebResponse { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether exception will be recorded
+    /// as an <see cref="ActivityEvent"/> or not. Default value: <see
+    /// langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>RecordException is supported on all runtimes.</b></para>
+    /// <para>For specification details see: <see
+    /// href="https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/exceptions.md"
+    /// />.</para>
+    /// </remarks>
+    public bool RecordException { get; set; }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal bool EventFilterHttpRequestMessage(string activityName, object arg1)
+    {
+        try
         {
-            try
-            {
-                return
-                    this.Filter == null ||
-                    !TryParseHttpRequestMessage(activityName, arg1, out HttpRequestMessage requestMessage) ||
-                    this.Filter(requestMessage);
-            }
-            catch (Exception ex)
-            {
-                HttpInstrumentationEventSource.Log.RequestFilterException(ex);
-                return false;
-            }
+            return
+                this.FilterHttpRequestMessage == null ||
+                !TryParseHttpRequestMessage(activityName, arg1, out HttpRequestMessage requestMessage) ||
+                this.FilterHttpRequestMessage(requestMessage);
         }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool TryParseHttpRequestMessage(string activityName, object arg1, out HttpRequestMessage requestMessage)
+        catch (Exception ex)
         {
-            return (requestMessage = arg1 as HttpRequestMessage) != null && activityName == "System.Net.Http.HttpRequestOut";
+            HttpInstrumentationEventSource.Log.RequestFilterException(ex);
+            return false;
         }
+    }
+
+    internal bool EventFilterHttpWebRequest(HttpWebRequest request)
+    {
+        try
+        {
+            return this.FilterHttpWebRequest?.Invoke(request) ?? true;
+        }
+        catch (Exception ex)
+        {
+            HttpInstrumentationEventSource.Log.RequestFilterException(ex);
+            return false;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryParseHttpRequestMessage(string activityName, object arg1, out HttpRequestMessage requestMessage)
+    {
+        return (requestMessage = arg1 as HttpRequestMessage) != null && activityName == "System.Net.Http.HttpRequestOut";
     }
 }

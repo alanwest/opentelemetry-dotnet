@@ -2,28 +2,38 @@
   <Import Project=".\Common.props" />
 
   <ItemGroup>
-    <PackageReference Include="MinVer" Version="$(MinVerPkgVer)" Condition="'$(IntegrationBuild)' != 'true'">
+    <PackageReference Include="MinVer" Condition="'$(IntegrationBuild)' != 'true'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-  </ItemGroup>
 
-  <!-- Temporarily disable public API check till metrics get close to Release
-  <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="$(MicrosoftCodeAnalysisAnalyzersPkgVer)" Condition=" $(OS) == 'Windows_NT'">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers">
       <PrivateAssets>All</PrivateAssets>
-  </PackageReference>
-  -->
-
-  <ItemGroup Condition="'$(MinVerTagPrefix)' == 'core-' AND '$(CheckAPICompatibility)' == 'true'">
-    <PackageReference Include="Microsoft.DotNet.ApiCompat" Version="6.0.0-beta.21308.1" PrivateAssets="All" />
-    <ResolvedMatchingContract Include="..\LastMajorVersionBinaries\$(AssemblyName)\$(OTelPreviousStableVer)\lib\$(TargetFramework)\$(AssemblyName).dll" />
+    </PackageReference>
   </ItemGroup>
 
-  <Target Name="PreBuild" BeforeTargets="PreBuildEvent" Condition="'$(MinVerTagPrefix)' == 'core-' AND '$(CheckAPICompatibility)' == 'true'">
-    <Exec Command="powershell -ExecutionPolicy Unrestricted -File &quot;$(RepoRoot)\build\PreBuild.ps1&quot; -package $(AssemblyName) -version &quot;$(OTelPreviousStableVer)&quot;" />
+  <PropertyGroup>
+    <RunApiCompat>true</RunApiCompat>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MinVerTagPrefix)' == 'core-' AND '$(CheckAPICompatibility)' == 'true' AND '$(RunApiCompat)' == 'true'">
+    <PackageReference Include="Microsoft.DotNet.ApiCompat" PrivateAssets="All" />
+    <ResolvedMatchingContract Include="$(RepoRoot)\build\LastMajorVersionBinaries\$(AssemblyName)\$(OTelLatestStableVer)\lib\$(TargetFramework)\$(AssemblyName).dll" />
+  </ItemGroup>
+
+  <Target Name="PreBuild" BeforeTargets="DispatchToInnerBuilds;ValidateApiCompatForSrc" Condition="'$(MinVerTagPrefix)' == 'core-' AND '$(CheckAPICompatibility)' == 'true' AND '$(RunApiCompat)' == 'true'">
+    <!-- Note: DispatchToInnerBuilds is called for projects with multiple
+    targets defined to spawn a build process for each target framework being
+    compiled. Executing BEFORE that step means this runs once for a project
+    instead of in parallel for each target framework defined. If we ever have a
+    project with only a single target, this will NOT run and an alternative
+    solution will be needed. -->
+    <Message Text="ApiCompat: Running the powershell script to download the package for $(MSBuildProjectName)." Importance="High"/>
+    <Exec Command="powershell -ExecutionPolicy Unrestricted -File &quot;$(RepoRoot)\build\PreBuild.ps1&quot; -package $(AssemblyName) -version &quot;$(OTelLatestStableVer)&quot; -workDir &quot;$(RepoRoot)\build\LastMajorVersionBinaries&quot;" />
   </Target>
 
-  <Target Name="FindContractDependencyPaths" BeforeTargets="ValidateApiCompatForSrc" AfterTargets="ResolveAssemblyReferences" Condition="'$(MinVerTagPrefix)' == 'core-' AND '$(CheckAPICompatibility)' == 'true'">
+  <Target Name="FindContractDependencyPaths" BeforeTargets="ValidateApiCompatForSrc" AfterTargets="ResolveAssemblyReferences" Condition="'$(MinVerTagPrefix)' == 'core-' AND '$(CheckAPICompatibility)' == 'true' AND '$(RunApiCompat)' == 'true'">
+    <Message Text="ApiCompat: Finding the contract dependency path for $(MSBuildProjectName)." Importance="High"/>
     <ItemGroup>
       <_ReferencePathDirectories Include="@(ReferencePath -> '%(RootDir)%(Directory)')" />
     </ItemGroup>
@@ -33,11 +43,14 @@
   </Target>
 
   <PropertyGroup>
+    <!-- OmniSharp/VS Code requires TargetFrameworks to be in descending order for IntelliSense and analysis. -->
+    <DefaultTargetFrameworks>net6.0;netstandard2.0;net462</DefaultTargetFrameworks>
     <CodeAnalysisRuleSet>$(MSBuildThisFileDirectory)/OpenTelemetry.prod.ruleset</CodeAnalysisRuleSet>
     <NoWarn>$(NoWarn),1573,1712</NoWarn>
     <PackageOutputPath Condition="$(Build_ArtifactStagingDirectory) != ''">$(Build_ArtifactStagingDirectory)</PackageOutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!--<MinVerVerbosity>detailed</MinVerVerbosity>-->
+    <ApiCompatExcludeAttributeList>$(RepoRoot)\build\GlobalAttrExclusions.txt</ApiCompatExcludeAttributeList>
   </PropertyGroup>
 
   <Target Name="AssemblyVersionTarget" AfterTargets="MinVer" Condition="'$(MinVerVersion)'!='' AND '$(BuildNumber)' != ''">
@@ -54,6 +67,7 @@
     <PackageProjectUrl>https://opentelemetry.io</PackageProjectUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <Authors>OpenTelemetry Authors</Authors>
+    <Copyright>Copyright The OpenTelemetry Authors</Copyright>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 

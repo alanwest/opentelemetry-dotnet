@@ -2,6 +2,176 @@
 
 ## Unreleased
 
+## 1.6.0-alpha.1
+
+Released 2023-Jul-12
+
+* Updated `System.Diagnostics.DiagnosticSource` package version to `7.0.2`.
+  ([#4576](https://github.com/open-telemetry/opentelemetry-dotnet/pull/4576))
+
+* **Breaking change** In order to make `RuntimeContext` compatible with
+  ahead-of-time compilation (AOT),
+  `RuntimeContext.ContextSlotType` can only be assigned one
+  of the following types: `AsyncLocalRuntimeContextSlot<>`,
+  `ThreadLocalRuntimeContextSlot<>`, and `RemotingRuntimeContextSlot<>`. A
+  `System.NotSupportedException` will be thrown if you try to assign any type
+  other than the three types mentioned.
+  ([#4542](https://github.com/open-telemetry/opentelemetry-dotnet/pull/4542))
+
+* Added [Logs Bridge
+  API](https://github.com/open-telemetry/opentelemetry-specification/blob/976432b74c565e8a84af3570e9b82cb95e1d844c/specification/logs/bridge-api.md)
+  implementation (`LoggerProviderBuilder`, `LoggerProvider`, `Logger`, etc.).
+  ([#4433](https://github.com/open-telemetry/opentelemetry-dotnet/pull/4433))
+
+## 1.5.1
+
+Released 2023-Jun-26
+
+## 1.5.0
+
+Released 2023-Jun-05
+
+## 1.5.0-rc.1
+
+Released 2023-May-25
+
+## 1.5.0-alpha.2
+
+Released 2023-Mar-31
+
+## 1.5.0-alpha.1
+
+Released 2023-Mar-07
+
+## 1.4.0
+
+Released 2023-Feb-24
+
+## 1.4.0-rc.4
+
+Released 2023-Feb-10
+
+## 1.4.0-rc.3
+
+Released 2023-Feb-01
+
+## 1.4.0-rc.2
+
+Released 2023-Jan-09
+
+## 1.4.0-rc.1
+
+Released 2022-Dec-12
+
+* Updated to System.Diagnostics.DiagnosticSource version `7.0.0`.
+
+## 1.4.0-beta.3
+
+Released 2022-Nov-07
+
+* Updated to System.Diagnostics.DiagnosticSource version `7.0.0-rc.2.22472.3`.
+
+## 1.4.0-beta.2
+
+Released 2022-Oct-17
+
+## 1.4.0-beta.1
+
+Released 2022-Sep-29
+
+* Updated to System.Diagnostics.DiagnosticSource version `7.0.0-rc.1.22426.10`.
+([#3698](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3698))
+
+## 1.4.0-alpha.2
+
+Released 2022-Aug-18
+
+* Updated to System.Diagnostics.DiagnosticSource preview version 7.0.0.
+
+  With this update, applications targeting .NET 5 and lower will receive a
+  warning at build time as described [here](https://github.com/dotnet/runtime/pull/72518)
+  (note: building using older versions of the .NET SDK produces an error at
+  build time). This is because .NET 5 reached EOL in May 2022 and .NET
+  Core 3.1 reaches EOL in December 2022. End of support
+  dates for .NET are published
+  [here](https://dotnet.microsoft.com/download/dotnet).
+
+  There is no guarantee that System.Diagnostics.DiagnosticSource will continue
+  to work on older versions of .NET. However, the build warning can be
+  suppressed by setting the `SuppressTfmSupportBuildWarnings` MSBuild property.
+
+  This does not affect applications targeting .NET Framework.
+  [#3539](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3539)
+
+## 1.4.0-alpha.1
+
+Released 2022-Aug-02
+
+* Add `Activity.RecordException` overload accepting additional attributes to
+  add to the `ActivityEvent`.
+  [#3433](https://github.com/open-telemetry/opentelemetry-dotnet/pull/3433)
+
+## 1.3.0
+
+Released 2022-Jun-03
+
+## 1.3.0-rc.2
+
+Released 2022-June-1
+
+* `B3Propagator` class from `OpenTelemetry.Extensions.Propagators` namespace has
+  been deprecated and moved as is to a new `OpenTelemetry.Extensions.Propagators`
+  namespace, shipped as part of the `OpenTelemetry.Extensions.Propagators` package.
+  It will be removed in the next major release, see issue [#3259](https://github.com/open-telemetry/opentelemetry-dotnet/issues/3259)
+
+## 1.3.0-beta.2
+
+Released 2022-May-16
+
+## 1.3.0-beta.1
+
+Released 2022-Apr-15
+
+* Removes .NET Framework 4.6.1. The minimum .NET Framework
+  version supported is .NET 4.6.2. ([#3190](https://github.com/open-telemetry/opentelemetry-dotnet/issues/3190))
+
+## 1.2.0
+
+Released 2022-Apr-15
+
+## 1.2.0-rc5
+
+Released 2022-Apr-12
+
+## 1.2.0-rc4
+
+Released 2022-Mar-30
+
+## 1.2.0-rc3
+
+Released 2022-Mar-04
+
+* Improved wildcard support for `AddSource`, `AddMeter` to cover `?` (which
+ matches exactly one character).
+ ([#2875](https://github.com/open-telemetry/opentelemetry-dotnet/pull/2875))
+
+## 1.2.0-rc2
+
+Released 2022-Feb-02
+
+* Added `ParentSpanId` to `TelemetrySpan` ([#2740](https://github.com/open-telemetry/opentelemetry-dotnet/pull/2740))
+
+## 1.2.0-rc1
+
+Released 2021-Nov-29
+
+## 1.2.0-beta2
+
+Released 2021-Nov-19
+
+* Updated System.Diagnostics.DiagnosticSource to version 6.0.0.
+  ([#2582](https://github.com/open-telemetry/opentelemetry-dotnet/pull/2582))
+
 ## 1.2.0-beta1
 
 Released 2021-Oct-08
@@ -98,7 +268,7 @@ Released 2021-Jan-29
   the `Status` (otel.status_code) tag (added on `Activity` using the `SetStatus`
   extension) will now be set as the `UNSET`, `OK`, or `ERROR` string
   representation instead of the `0`, `1`, or `2` integer representation.
-  ([#1579](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1579) &
+  ([#1579](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1579)
   [#1620](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1620))
 * Metrics API/SDK support is in an experimental state and is not recommended for
   production use. All metric APIs have been marked with the `Obsolete`
@@ -141,7 +311,7 @@ Released 2020-Nov-5
   ([#1413](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1413))
 * Moving grpc status and helper to grpc project
   ([#1422](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1422))
-* Renamed TextMapPropagator to TraceContextPropagator, CompositePropapagor to
+* Renamed TextMapPropagator to TraceContextPropagator, CompositePropagator to
   CompositeTextMapPropagator. IPropagator is renamed to TextMapPropagator and
   changed from interface to abstract class.
   ([#1427](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1427))
@@ -201,7 +371,7 @@ Released 2020-08-28
     header
     ([#1048](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1048))
 * Removed `DistributedContext` as it is no longer part of the spec
-  ([#1048](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1048)))
+  ([#1048](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1048))
 * Renaming from `ot` to `otel`
   ([#1046](https://github.com/open-telemetry/opentelemetry-dotnet/pull/1046))
 * Added `RuntimeContext` API

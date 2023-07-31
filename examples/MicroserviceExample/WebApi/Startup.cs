@@ -14,33 +14,28 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using OpenTelemetry.Trace;
 using Utils.Messaging;
 
-namespace WebApi
+namespace WebApi;
+
+public class Startup
 {
-    public class Startup
+    public Startup(IConfiguration configuration)
     {
-        public Startup(IConfiguration configuration)
-        {
-            this.Configuration = configuration;
-        }
+        this.Configuration = configuration;
+    }
 
-        public IConfiguration Configuration { get; }
+    public IConfiguration Configuration { get; }
 
-        public void ConfigureServices(IServiceCollection services)
-        {
-            services.AddControllers();
+    public void ConfigureServices(IServiceCollection services)
+    {
+        services.AddControllers();
 
-            services.AddSingleton<MessageSender>();
+        services.AddSingleton<MessageSender>();
 
-            services.AddOpenTelemetryTracing((builder) => builder
+        services.AddOpenTelemetry()
+            .WithTracing(builder => builder
                 .AddAspNetCoreInstrumentation()
                 .AddSource(nameof(MessageSender))
                 .AddZipkinExporter(b =>
@@ -48,21 +43,20 @@ namespace WebApi
                     var zipkinHostName = Environment.GetEnvironmentVariable("ZIPKIN_HOSTNAME") ?? "localhost";
                     b.Endpoint = new Uri($"http://{zipkinHostName}:9411/api/v2/spans");
                 }));
-        }
+    }
 
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+    public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+    {
+        if (env.IsDevelopment())
         {
-            if (env.IsDevelopment())
-            {
-                app.UseDeveloperExceptionPage();
-            }
-
-            app.UseRouting();
-
-            app.UseEndpoints(endpoints =>
-            {
-                endpoints.MapControllers();
-            });
+            app.UseDeveloperExceptionPage();
         }
+
+        app.UseRouting();
+
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints.MapControllers();
+        });
     }
 }

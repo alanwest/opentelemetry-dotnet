@@ -14,14 +14,15 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Diagnostics;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
 
+namespace ReportingExceptions;
+
 public class Program
 {
-    private static readonly ActivitySource MyActivitySource = new ActivitySource(
+    private static readonly ActivitySource MyActivitySource = new(
         "MyCompany.MyProduct.MyLibrary");
 
     public static void Main()

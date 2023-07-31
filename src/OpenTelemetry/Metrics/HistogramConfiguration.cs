@@ -14,29 +14,13 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+namespace OpenTelemetry.Metrics;
 
-namespace OpenTelemetry.Metrics
+public class HistogramConfiguration : MetricStreamConfiguration
 {
-    public class HistogramConfiguration : MetricStreamConfiguration
-    {
-        private Aggregation aggregation = Aggregation.Histogram;
-
-        public double[] BucketBounds { get; set; }
-
-        public override Aggregation Aggregation
-        {
-            get => this.aggregation;
-
-            set
-            {
-                if (value != Aggregation.Histogram)
-                {
-                    throw new ArgumentException($"Aggregation must be Histogram.");
-                }
-
-                this.aggregation = value;
-            }
-        }
-    }
+    /// <summary>
+    /// Gets or sets a value indicating whether Min, Max
+    /// should be collected.
+    /// </summary>
+    public bool RecordMinMax { get; set; } = true;
 }

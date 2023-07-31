@@ -14,106 +14,80 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Diagnostics.Tracing;
-using System.Security;
 using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation
+namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation;
+
+[EventSource(Name = "OpenTelemetry-Exporter-OpenTelemetryProtocol")]
+internal sealed class OpenTelemetryProtocolExporterEventSource : EventSource
 {
-    [EventSource(Name = "OpenTelemetry-Exporter-OpenTelemetryProtocol")]
-    internal class OpenTelemetryProtocolExporterEventSource : EventSource
+    public static readonly OpenTelemetryProtocolExporterEventSource Log = new();
+
+    [NonEvent]
+    public void FailedToReachCollector(Uri collectorUri, Exception ex)
     {
-        public static readonly OpenTelemetryProtocolExporterEventSource Log = new OpenTelemetryProtocolExporterEventSource();
-
-        [NonEvent]
-        public void MissingPermissionsToReadEnvironmentVariable(SecurityException ex)
+        if (Log.IsEnabled(EventLevel.Error, EventKeywords.All))
         {
-            if (this.IsEnabled(EventLevel.Warning, EventKeywords.All))
-            {
-                this.MissingPermissionsToReadEnvironmentVariable(ex.ToInvariantString());
-            }
+            var rawCollectorUri = collectorUri.ToString();
+            this.FailedToReachCollector(rawCollectorUri, ex.ToInvariantString());
         }
+    }
 
-        [NonEvent]
-        public void FailedToConvertToProtoDefinitionError(Exception ex)
+    [NonEvent]
+    public void ExportMethodException(Exception ex)
+    {
+        if (Log.IsEnabled(EventLevel.Error, EventKeywords.All))
         {
-            if (Log.IsEnabled(EventLevel.Error, EventKeywords.All))
-            {
-                this.FailedToConvertToProtoDefinitionError(ex.ToInvariantString());
-            }
+            this.ExportMethodException(ex.ToInvariantString());
         }
+    }
 
-        [NonEvent]
-        public void FailedToReachCollector(Exception ex)
-        {
-            if (Log.IsEnabled(EventLevel.Error, EventKeywords.All))
-            {
-                this.FailedToReachCollector(ex.ToInvariantString());
-            }
-        }
+    [Event(2, Message = "Exporter failed send data to collector to {0} endpoint. Data will not be sent. Exception: {1}", Level = EventLevel.Error)]
+    public void FailedToReachCollector(string rawCollectorUri, string ex)
+    {
+        this.WriteEvent(2, rawCollectorUri, ex);
+    }
 
-        [NonEvent]
-        public void ExportMethodException(Exception ex)
-        {
-            if (Log.IsEnabled(EventLevel.Error, EventKeywords.All))
-            {
-                this.ExportMethodException(ex.ToInvariantString());
-            }
-        }
+    [Event(3, Message = "Could not translate activity from class '{0}' and method '{1}', span will not be recorded.", Level = EventLevel.Informational)]
+    public void CouldNotTranslateActivity(string className, string methodName)
+    {
+        this.WriteEvent(3, className, methodName);
+    }
 
-        [Event(1, Message = "Exporter failed to convert SpanData content into gRPC proto definition. Data will not be sent. Exception: {0}", Level = EventLevel.Error)]
-        public void FailedToConvertToProtoDefinitionError(string ex)
-        {
-            this.WriteEvent(1, ex);
-        }
+    [Event(4, Message = "Unknown error in export method: {0}", Level = EventLevel.Error)]
+    public void ExportMethodException(string ex)
+    {
+        this.WriteEvent(4, ex);
+    }
 
-        [Event(2, Message = "Exporter failed send data to collector. Data will not be sent. Exception: {0}", Level = EventLevel.Error)]
-        public void FailedToReachCollector(string ex)
-        {
-            this.WriteEvent(2, ex);
-        }
+    [Event(5, Message = "Could not translate metric from class '{0}' and method '{1}', metric will not be recorded.", Level = EventLevel.Informational)]
+    public void CouldNotTranslateMetric(string className, string methodName)
+    {
+        this.WriteEvent(5, className, methodName);
+    }
 
-        [Event(3, Message = "Could not translate activity from class '{0}' and method '{1}', span will not be recorded.", Level = EventLevel.Informational)]
-        public void CouldNotTranslateActivity(string className, string methodName)
-        {
-            this.WriteEvent(3, className, methodName);
-        }
+    [Event(8, Message = "Unsupported value for protocol '{0}' is configured, default protocol 'grpc' will be used.", Level = EventLevel.Warning)]
+    public void UnsupportedProtocol(string protocol)
+    {
+        this.WriteEvent(8, protocol);
+    }
 
-        [Event(4, Message = "Unknown error in export method: {0}", Level = EventLevel.Error)]
-        public void ExportMethodException(string ex)
-        {
-            this.WriteEvent(4, ex);
-        }
+    [Event(9, Message = "Could not translate LogRecord due to Exception: '{0}'. Log will not be exported.", Level = EventLevel.Warning)]
+    public void CouldNotTranslateLogRecord(string exceptionMessage)
+    {
+        this.WriteEvent(9, exceptionMessage);
+    }
 
-        [Event(5, Message = "Could not translate metric from class '{0}' and method '{1}', metric will not be recorded.", Level = EventLevel.Informational)]
-        public void CouldNotTranslateMetric(string className, string methodName)
-        {
-            this.WriteEvent(5, className, methodName);
-        }
+    [Event(10, Message = "Unsupported attribute type '{0}' for '{1}'. Attribute will not be exported.", Level = EventLevel.Warning)]
+    public void UnsupportedAttributeType(string type, string key)
+    {
+        this.WriteEvent(10, type.ToString(), key);
+    }
 
-        [Event(6, Message = "Failed to parse environment variable: '{0}', value: '{1}'.", Level = EventLevel.Warning)]
-        public void FailedToParseEnvironmentVariable(string name, string value)
-        {
-            this.WriteEvent(6, name, value);
-        }
-
-        [Event(7, Message = "Missing permissions to read environment variable: '{0}'", Level = EventLevel.Warning)]
-        public void MissingPermissionsToReadEnvironmentVariable(string exception)
-        {
-            this.WriteEvent(7, exception);
-        }
-
-        [Event(8, Message = "Unsupported value for protocol '{0}' is configured, default protocol 'grpc' will be used.", Level = EventLevel.Warning)]
-        public void UnsupportedProtocol(string protocol)
-        {
-            this.WriteEvent(8, protocol);
-        }
-
-        [Event(9, Message = "Could not translate LogRecord from class '{0}' and method '{1}', log will not be exported.", Level = EventLevel.Informational)]
-        public void CouldNotTranslateLogRecord(string className, string methodName)
-        {
-            this.WriteEvent(9, className, methodName);
-        }
+    [Event(11, Message = "{0} environment variable has an invalid value: '{1}'", Level = EventLevel.Warning)]
+    public void InvalidEnvironmentVariable(string key, string value)
+    {
+        this.WriteEvent(11, key, value);
     }
 }

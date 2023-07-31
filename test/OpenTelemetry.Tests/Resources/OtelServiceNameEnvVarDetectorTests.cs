@@ -14,57 +14,74 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
-namespace OpenTelemetry.Resources.Tests
+namespace OpenTelemetry.Resources.Tests;
+
+public class OtelServiceNameEnvVarDetectorTests : IDisposable
 {
-    public class OtelServiceNameEnvVarDetectorTests : IDisposable
+    public OtelServiceNameEnvVarDetectorTests()
     {
-        public OtelServiceNameEnvVarDetectorTests()
+        Environment.SetEnvironmentVariable(OtelServiceNameEnvVarDetector.EnvVarKey, null);
+    }
+
+    public void Dispose()
+    {
+        Environment.SetEnvironmentVariable(OtelServiceNameEnvVarDetector.EnvVarKey, null);
+        GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public void OtelServiceNameEnvVar_EnvVarKey()
+    {
+        Assert.Equal("OTEL_SERVICE_NAME", OtelServiceNameEnvVarDetector.EnvVarKey);
+    }
+
+    [Fact]
+    public void OtelServiceNameEnvVar_Null()
+    {
+        // Act
+        var resource = new OtelServiceNameEnvVarDetector(
+            new ConfigurationBuilder().AddEnvironmentVariables().Build())
+            .Detect();
+
+        // Assert
+        Assert.Equal(Resource.Empty, resource);
+    }
+
+    [Fact]
+    public void OtelServiceNameEnvVar_WithValue()
+    {
+        // Arrange
+        var envVarValue = "my-service";
+        Environment.SetEnvironmentVariable(OtelServiceNameEnvVarDetector.EnvVarKey, envVarValue);
+
+        // Act
+        var resource = new OtelServiceNameEnvVarDetector(
+            new ConfigurationBuilder().AddEnvironmentVariables().Build())
+            .Detect();
+
+        // Assert
+        Assert.NotEqual(Resource.Empty, resource);
+        Assert.Contains(new KeyValuePair<string, object>(ResourceSemanticConventions.AttributeServiceName, envVarValue), resource.Attributes);
+    }
+
+    [Fact]
+    public void OtelServiceNameEnvVar_UsingIConfiguration()
+    {
+        var values = new Dictionary<string, string>()
         {
-            Environment.SetEnvironmentVariable(OtelServiceNameEnvVarDetector.EnvVarKey, null);
-        }
+            [OtelServiceNameEnvVarDetector.EnvVarKey] = "my-service",
+        };
 
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(OtelServiceNameEnvVarDetector.EnvVarKey, null);
-        }
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
 
-        [Fact]
-        public void OtelServiceNameEnvVar_EnvVarKey()
-        {
-            // Act
-            var resource = new OtelServiceNameEnvVarDetector().Detect();
+        var resource = new OtelServiceNameEnvVarDetector(configuration).Detect();
 
-            // Assert
-            Assert.Equal("OTEL_SERVICE_NAME", OtelServiceNameEnvVarDetector.EnvVarKey);
-        }
-
-        [Fact]
-        public void OtelServiceNameEnvVar_Null()
-        {
-            // Act
-            var resource = new OtelServiceNameEnvVarDetector().Detect();
-
-            // Assert
-            Assert.Equal(Resource.Empty, resource);
-        }
-
-        [Fact]
-        public void OtelServiceNameEnvVar_WithValue()
-        {
-            // Arrange
-            var envVarValue = "my-service";
-            Environment.SetEnvironmentVariable(OtelServiceNameEnvVarDetector.EnvVarKey, envVarValue);
-
-            // Act
-            var resource = new OtelServiceNameEnvVarDetector().Detect();
-
-            // Assert
-            Assert.NotEqual(Resource.Empty, resource);
-            Assert.Contains(new KeyValuePair<string, object>(ResourceSemanticConventions.AttributeServiceName, envVarValue), resource.Attributes);
-        }
+        Assert.NotEqual(Resource.Empty, resource);
+        Assert.Contains(new KeyValuePair<string, object>(ResourceSemanticConventions.AttributeServiceName, "my-service"), resource.Attributes);
     }
 }

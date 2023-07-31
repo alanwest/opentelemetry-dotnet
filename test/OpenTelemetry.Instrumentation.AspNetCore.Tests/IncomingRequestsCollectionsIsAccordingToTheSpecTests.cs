@@ -14,59 +14,63 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Diagnostics;
-using System.Linq;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using Moq;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
-#if NETCOREAPP3_1
-using TestApp.AspNetCore._3._1;
-#else
-using TestApp.AspNetCore._5._0;
-#endif
+using TestApp.AspNetCore;
 using Xunit;
 
-namespace OpenTelemetry.Instrumentation.AspNetCore.Tests
+namespace OpenTelemetry.Instrumentation.AspNetCore.Tests;
+
+public class IncomingRequestsCollectionsIsAccordingToTheSpecTests
+    : IClassFixture<WebApplicationFactory<Program>>
 {
-    public class IncomingRequestsCollectionsIsAccordingToTheSpecTests
-        : IClassFixture<WebApplicationFactory<Startup>>
+    private readonly WebApplicationFactory<Program> factory;
+
+    public IncomingRequestsCollectionsIsAccordingToTheSpecTests(WebApplicationFactory<Program> factory)
     {
-        private readonly WebApplicationFactory<Startup> factory;
+        this.factory = factory;
+    }
 
-        public IncomingRequestsCollectionsIsAccordingToTheSpecTests(WebApplicationFactory<Startup> factory)
+    [Theory]
+    [InlineData("/api/values", null, "user-agent", 503, "503")]
+    [InlineData("/api/values", "?query=1", null, 503, null)]
+    [InlineData("/api/exception", null, null, 503, null)]
+    [InlineData("/api/exception", null, null, 503, null, true)]
+    public async Task SuccessfulTemplateControllerCallGeneratesASpan_Old(
+        string urlPath,
+        string query,
+        string userAgent,
+        int statusCode,
+        string reasonPhrase,
+        bool recordException = false)
+    {
+        try
         {
-            this.factory = factory;
-        }
+            Environment.SetEnvironmentVariable("OTEL_SEMCONV_STABILITY_OPT_IN", "none");
 
-        [Theory]
-        [InlineData("/api/values", "user-agent", 503, "503")]
-        [InlineData("/api/values", null, 503, null)]
-        [InlineData("/api/exception", null, 503, null)]
-        [InlineData("/api/exception", null, 503, null, true)]
-        public async Task SuccessfulTemplateControllerCallGeneratesASpan(
-            string urlPath,
-            string userAgent,
-            int statusCode,
-            string reasonPhrase,
-            bool recordException = false)
-        {
-            var processor = new Mock<BaseProcessor<Activity>>();
+            var exportedItems = new List<Activity>();
 
             // Arrange
             using (var client = this.factory
                 .WithWebHostBuilder(builder =>
+                {
                     builder.ConfigureTestServices((IServiceCollection services) =>
                     {
                         services.AddSingleton<CallbackMiddleware.CallbackMiddlewareImpl>(new TestCallbackMiddlewareImpl(statusCode, reasonPhrase));
-                        services.AddOpenTelemetryTracing((builder) => builder.AddAspNetCoreInstrumentation(options => options.RecordException = recordException)
-                        .AddProcessor(processor.Object));
-                    }))
+                        services.AddOpenTelemetry()
+                            .WithTracing(builder => builder
+                                .AddAspNetCoreInstrumentation(options => options.RecordException = recordException)
+                                .AddInMemoryExporter(exportedItems));
+                    });
+                    builder.ConfigureLogging(loggingBuilder => loggingBuilder.ClearProviders());
+                })
                 .CreateClient())
             {
                 try
@@ -77,7 +81,13 @@ namespace OpenTelemetry.Instrumentation.AspNetCore.Tests
                     }
 
                     // Act
-                    var response = await client.GetAsync(urlPath);
+                    var path = urlPath;
+                    if (query != null)
+                    {
+                        path += query;
+                    }
+
+                    using var response = await client.GetAsync(path).ConfigureAwait(false);
                 }
                 catch (Exception)
                 {
@@ -86,7 +96,7 @@ namespace OpenTelemetry.Instrumentation.AspNetCore.Tests
 
                 for (var i = 0; i < 10; i++)
                 {
-                    if (processor.Invocations.Count == 3)
+                    if (exportedItems.Count == 1)
                     {
                         break;
                     }
@@ -94,38 +104,40 @@ namespace OpenTelemetry.Instrumentation.AspNetCore.Tests
                     // We need to let End callback execute as it is executed AFTER response was returned.
                     // In unit tests environment there may be a lot of parallel unit tests executed, so
                     // giving some breezing room for the End callback to complete
-                    await Task.Delay(TimeSpan.FromSeconds(1));
+                    await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
                 }
             }
 
-            Assert.Equal(3, processor.Invocations.Count); // SetParentProvider/Begin/End called
-            var activity = (Activity)processor.Invocations[2].Arguments[0];
+            Assert.Single(exportedItems);
+            var activity = exportedItems[0];
 
             Assert.Equal(ActivityKind.Server, activity.Kind);
-            Assert.Equal("localhost", activity.GetTagValue(SemanticConventions.AttributeHttpHost));
+            Assert.Equal("localhost", activity.GetTagValue(SemanticConventions.AttributeNetHostName));
             Assert.Equal("GET", activity.GetTagValue(SemanticConventions.AttributeHttpMethod));
+            Assert.Equal("1.1", activity.GetTagValue(SemanticConventions.AttributeHttpFlavor));
+            Assert.Equal("http", activity.GetTagValue(SemanticConventions.AttributeHttpScheme));
             Assert.Equal(urlPath, activity.GetTagValue(SemanticConventions.AttributeHttpTarget));
-            Assert.Equal($"http://localhost{urlPath}", activity.GetTagValue(SemanticConventions.AttributeHttpUrl));
+            Assert.Equal($"http://localhost{urlPath}{query}", activity.GetTagValue(SemanticConventions.AttributeHttpUrl));
             Assert.Equal(statusCode, activity.GetTagValue(SemanticConventions.AttributeHttpStatusCode));
 
             if (statusCode == 503)
             {
-                Assert.Equal(Status.Error.StatusCode, activity.GetStatus().StatusCode);
+                Assert.Equal(ActivityStatusCode.Error, activity.Status);
             }
             else
             {
-                Assert.Equal(Status.Unset, activity.GetStatus());
+                Assert.Equal(ActivityStatusCode.Unset, activity.Status);
             }
 
             // Instrumentation is not expected to set status description
             // as the reason can be inferred from SemanticConventions.AttributeHttpStatusCode
             if (!urlPath.EndsWith("exception"))
             {
-                Assert.True(string.IsNullOrEmpty(activity.GetStatus().Description));
+                Assert.True(string.IsNullOrEmpty(activity.StatusDescription));
             }
             else
             {
-                Assert.Equal("exception description", activity.GetStatus().Description);
+                Assert.Equal("exception description", activity.StatusDescription);
             }
 
             if (recordException)
@@ -134,48 +146,51 @@ namespace OpenTelemetry.Instrumentation.AspNetCore.Tests
                 Assert.Equal("exception", activity.Events.First().Name);
             }
 
-            this.ValidateTagValue(activity, SemanticConventions.AttributeHttpUserAgent, userAgent);
+            ValidateTagValue(activity, SemanticConventions.AttributeHttpUserAgent, userAgent);
 
             activity.Dispose();
-            processor.Object.Dispose();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OTEL_SEMCONV_STABILITY_OPT_IN", null);
+        }
+    }
+
+    private static void ValidateTagValue(Activity activity, string attribute, string expectedValue)
+    {
+        if (string.IsNullOrEmpty(expectedValue))
+        {
+            Assert.Null(activity.GetTagValue(attribute));
+        }
+        else
+        {
+            Assert.Equal(expectedValue, activity.GetTagValue(attribute));
+        }
+    }
+
+    public class TestCallbackMiddlewareImpl : CallbackMiddleware.CallbackMiddlewareImpl
+    {
+        private readonly int statusCode;
+        private readonly string reasonPhrase;
+
+        public TestCallbackMiddlewareImpl(int statusCode, string reasonPhrase)
+        {
+            this.statusCode = statusCode;
+            this.reasonPhrase = reasonPhrase;
         }
 
-        private void ValidateTagValue(Activity activity, string attribute, string expectedValue)
+        public override async Task<bool> ProcessAsync(HttpContext context)
         {
-            if (string.IsNullOrEmpty(expectedValue))
-            {
-                Assert.Null(activity.GetTagValue(attribute));
-            }
-            else
-            {
-                Assert.Equal(expectedValue, activity.GetTagValue(attribute));
-            }
-        }
+            context.Response.StatusCode = this.statusCode;
+            context.Response.HttpContext.Features.Get<IHttpResponseFeature>().ReasonPhrase = this.reasonPhrase;
+            await context.Response.WriteAsync("empty").ConfigureAwait(false);
 
-        public class TestCallbackMiddlewareImpl : CallbackMiddleware.CallbackMiddlewareImpl
-        {
-            private readonly int statusCode;
-            private readonly string reasonPhrase;
-
-            public TestCallbackMiddlewareImpl(int statusCode, string reasonPhrase)
+            if (context.Request.Path.Value.EndsWith("exception"))
             {
-                this.statusCode = statusCode;
-                this.reasonPhrase = reasonPhrase;
+                throw new Exception("exception description");
             }
 
-            public override async Task<bool> ProcessAsync(HttpContext context)
-            {
-                context.Response.StatusCode = this.statusCode;
-                context.Response.HttpContext.Features.Get<IHttpResponseFeature>().ReasonPhrase = this.reasonPhrase;
-                await context.Response.WriteAsync("empty");
-
-                if (context.Request.Path.Value.EndsWith("exception"))
-                {
-                    throw new Exception("exception description");
-                }
-
-                return false;
-            }
+            return false;
         }
     }
 }

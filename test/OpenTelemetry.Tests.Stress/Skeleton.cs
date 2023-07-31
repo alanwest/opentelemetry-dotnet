@@ -14,21 +14,23 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Diagnostics;
-using System.Linq;
+using System.Diagnostics.Metrics;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
+using OpenTelemetry.Metrics;
 
-// namespace OpenTelemetry.Tests.Stress;
+namespace OpenTelemetry.Tests.Stress;
 
 public partial class Program
 {
     private static volatile bool bContinue = true;
     private static volatile string output = "Test results not available yet.";
 
-    public static void Stress(int concurrency = 0)
+    static Program()
+    {
+    }
+
+    public static void Stress(int concurrency = 0, int prometheusPort = 0)
     {
 #if DEBUG
         Console.WriteLine("***WARNING*** The current build is DEBUG which may affect timing!");
@@ -45,14 +47,49 @@ public partial class Program
             concurrency = Environment.ProcessorCount;
         }
 
+        using var meter = new Meter("OpenTelemetry.Tests.Stress." + Guid.NewGuid().ToString("D"));
+        var cntLoopsTotal = 0UL;
+        meter.CreateObservableCounter(
+            "OpenTelemetry.Tests.Stress.Loops",
+            () => unchecked((long)cntLoopsTotal),
+            description: "The total number of `Run()` invocations that are completed.");
+        var dLoopsPerSecond = 0D;
+        meter.CreateObservableGauge(
+            "OpenTelemetry.Tests.Stress.LoopsPerSecond",
+            () => dLoopsPerSecond,
+            description: "The rate of `Run()` invocations based on a small sliding window of few hundreds of milliseconds.");
+        var dCpuCyclesPerLoop = 0D;
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            meter.CreateObservableGauge(
+                "OpenTelemetry.Tests.Stress.CpuCyclesPerLoop",
+                () => dCpuCyclesPerLoop,
+                description: "The average CPU cycles for each `Run()` invocation, based on a small sliding window of few hundreds of milliseconds.");
+        }
+
+        using var meterProvider = prometheusPort != 0 ? Sdk.CreateMeterProviderBuilder()
+            .AddMeter(meter.Name)
+            .AddRuntimeInstrumentation()
+            .AddPrometheusHttpListener(
+                options => options.UriPrefixes = new string[] { $"http://localhost:{prometheusPort}/" })
+            .Build() : null;
+
         var statistics = new long[concurrency];
-        var watchForTotal = new Stopwatch();
-        watchForTotal.Start();
+        var watchForTotal = Stopwatch.StartNew();
 
         Parallel.Invoke(
             () =>
             {
-                Console.WriteLine($"Running (concurrency = {concurrency}), press <Esc> to stop...");
+                Console.Write($"Running (concurrency = {concurrency}");
+
+                if (prometheusPort != 0)
+                {
+                    Console.Write($", prometheusEndpoint = http://localhost:{prometheusPort}/metrics/");
+                }
+
+                Console.WriteLine("), press <Esc> to stop...");
+
                 var bOutput = false;
                 var watch = new Stopwatch();
                 while (true)
@@ -89,19 +126,20 @@ public partial class Program
                     Thread.Sleep(200);
                     watch.Stop();
 
-                    var cntLoopsNew = (ulong)statistics.Sum();
+                    cntLoopsTotal = (ulong)statistics.Sum();
                     var cntCpuCyclesNew = GetCpuCycles();
 
-                    var nLoops = cntLoopsNew - cntLoopsOld;
+                    var nLoops = cntLoopsTotal - cntLoopsOld;
                     var nCpuCycles = cntCpuCyclesNew - cntCpuCyclesOld;
 
-                    var nLoopsPerSecond = (double)nLoops / ((double)watch.ElapsedMilliseconds / 1000.0);
-                    var nCpuCyclesPerLoop = nLoops == 0 ? 0 : nCpuCycles / nLoops;
+                    dLoopsPerSecond = (double)nLoops / ((double)watch.ElapsedMilliseconds / 1000.0);
+                    dCpuCyclesPerLoop = nLoops == 0 ? 0 : nCpuCycles / nLoops;
 
-                    output = $"Loops: {cntLoopsNew:n0}, Loops/Second: {nLoopsPerSecond:n0}, CPU Cycles/Loop: {nCpuCyclesPerLoop:n0}";
+                    output = $"Loops: {cntLoopsTotal:n0}, Loops/Second: {dLoopsPerSecond:n0}, CPU Cycles/Loop: {dCpuCyclesPerLoop:n0}, RunwayTime (Seconds): {watchForTotal.Elapsed.TotalSeconds:n0} ";
                     Console.Title = output;
                 }
-            }, () =>
+            },
+            () =>
             {
                 Parallel.For(0, concurrency, (i) =>
                 {
@@ -115,11 +153,12 @@ public partial class Program
             });
 
         watchForTotal.Stop();
-        var cntLoopsTotal = (ulong)statistics.Sum();
+        cntLoopsTotal = (ulong)statistics.Sum();
         var totalLoopsPerSecond = (double)cntLoopsTotal / ((double)watchForTotal.ElapsedMilliseconds / 1000.0);
         var cntCpuCyclesTotal = GetCpuCycles();
         var cpuCyclesPerLoopTotal = cntLoopsTotal == 0 ? 0 : cntCpuCyclesTotal / cntLoopsTotal;
         Console.WriteLine("Stopping the stress test...");
+        Console.WriteLine($"* Total Runaway Time (seconds) {watchForTotal.Elapsed.TotalSeconds:n0}");
         Console.WriteLine($"* Total Loops: {cntLoopsTotal:n0}");
         Console.WriteLine($"* Average Loops/Second: {totalLoopsPerSecond:n0}");
         Console.WriteLine($"* Average CPU Cycles/Loop: {cpuCyclesPerLoopTotal:n0}");
@@ -131,11 +170,7 @@ public partial class Program
 
     private static ulong GetCpuCycles()
     {
-#if NET462
-        if (Environment.OSVersion.Platform != PlatformID.Win32NT)
-#else
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-#endif
         {
             return 0;
         }

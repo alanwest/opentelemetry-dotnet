@@ -14,21 +14,17 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+namespace OpenTelemetry.Metrics;
 
-namespace OpenTelemetry.Metrics
+public enum AggregationTemporality : byte
 {
-    [Flags]
-    public enum AggregationTemporality : byte
-    {
-        /// <summary>
-        /// Cumulative.
-        /// </summary>
-        Cumulative = 0b1,
+    /// <summary>
+    /// Cumulative.
+    /// </summary>
+    Cumulative = 0b1,
 
-        /// <summary>
-        /// Delta.
-        /// </summary>
-        Delta = 0b10,
-    }
+    /// <summary>
+    /// Delta.
+    /// </summary>
+    Delta = 0b10,
 }

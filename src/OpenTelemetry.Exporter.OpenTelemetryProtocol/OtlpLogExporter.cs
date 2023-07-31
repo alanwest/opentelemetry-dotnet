@@ -14,84 +14,105 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+using System.Diagnostics;
 using OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation;
 using OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExportClient;
+using OpenTelemetry.Internal;
 using OpenTelemetry.Logs;
-using OtlpCollector = Opentelemetry.Proto.Collector.Logs.V1;
-using OtlpResource = Opentelemetry.Proto.Resource.V1;
+using OtlpCollector = OpenTelemetry.Proto.Collector.Logs.V1;
+using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 
-namespace OpenTelemetry.Exporter
+namespace OpenTelemetry.Exporter;
+
+/// <summary>
+/// Exporter consuming <see cref="LogRecord"/> and exporting the data using
+/// the OpenTelemetry protocol (OTLP).
+/// </summary>
+internal sealed class OtlpLogExporter : BaseExporter<LogRecord>
 {
+    private readonly SdkLimitOptions sdkLimitOptions;
+    private readonly IExportClient<OtlpCollector.ExportLogsServiceRequest> exportClient;
+
+    private OtlpResource.Resource processResource;
+
     /// <summary>
-    /// Exporter consuming <see cref="LogRecord"/> and exporting the data using
-    /// the OpenTelemetry protocol (OTLP).
+    /// Initializes a new instance of the <see cref="OtlpLogExporter"/> class.
     /// </summary>
-    internal class OtlpLogExporter : BaseExporter<LogRecord>
+    /// <param name="options">Configuration options for the exporter.</param>
+    public OtlpLogExporter(OtlpExporterOptions options)
+        : this(options, new(), null)
     {
-        private readonly IExportClient<OtlpCollector.ExportLogsServiceRequest> exportClient;
+    }
 
-        private OtlpResource.Resource processResource;
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OtlpLogExporter"/> class.
+    /// </summary>
+    /// <param name="exporterOptions">Configuration options for the exporter.</param>
+    /// <param name="sdkLimitOptions"><see cref="SdkLimitOptions"/>.</param>
+    /// <param name="exportClient">Client used for sending export request.</param>
+    internal OtlpLogExporter(
+        OtlpExporterOptions exporterOptions,
+        SdkLimitOptions sdkLimitOptions,
+        IExportClient<OtlpCollector.ExportLogsServiceRequest> exportClient = null)
+    {
+        Debug.Assert(exporterOptions != null, "exporterOptions was null");
+        Debug.Assert(sdkLimitOptions != null, "sdkLimitOptions was null");
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="OtlpLogExporter"/> class.
-        /// </summary>
-        /// <param name="options">Configuration options for the exporter.</param>
-        public OtlpLogExporter(OtlpExporterOptions options)
-            : this(options, null)
+        this.sdkLimitOptions = sdkLimitOptions;
+
+        // Each of the Otlp exporters: Traces, Metrics, and Logs set the same value for `OtlpKeyValueTransformer.LogUnsupportedAttributeType`
+        // and `ConfigurationExtensions.LogInvalidEnvironmentVariable` so it should be fine even if these exporters are used together.
+        OtlpKeyValueTransformer.LogUnsupportedAttributeType = (string tagValueType, string tagKey) =>
         {
+            OpenTelemetryProtocolExporterEventSource.Log.UnsupportedAttributeType(tagValueType, tagKey);
+        };
+
+        ConfigurationExtensions.LogInvalidEnvironmentVariable = (string key, string value) =>
+        {
+            OpenTelemetryProtocolExporterEventSource.Log.InvalidEnvironmentVariable(key, value);
+        };
+
+        if (exportClient != null)
+        {
+            this.exportClient = exportClient;
         }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="OtlpLogExporter"/> class.
-        /// </summary>
-        /// <param name="options">Configuration options for the exporter.</param>
-        /// <param name="exportClient">Client used for sending export request.</param>
-        internal OtlpLogExporter(OtlpExporterOptions options, IExportClient<OtlpCollector.ExportLogsServiceRequest> exportClient = null)
+        else
         {
-            if (exportClient != null)
-            {
-                this.exportClient = exportClient;
-            }
-            else
-            {
-                // TODO: this instantiation should be aligned with the protocol option (grpc or http/protobuf) when OtlpHttpMetricsExportClient will be implemented.
-                this.exportClient = new OtlpGrpcLogExportClient(options);
-            }
+            this.exportClient = exporterOptions.GetLogExportClient();
         }
+    }
 
-        internal OtlpResource.Resource ProcessResource => this.processResource ??= this.ParentProvider.GetResource().ToOtlpResource();
+    internal OtlpResource.Resource ProcessResource => this.processResource ??= this.ParentProvider.GetResource().ToOtlpResource();
 
-        /// <inheritdoc/>
-        public override ExportResult Export(in Batch<LogRecord> logRecordBatch)
+    /// <inheritdoc/>
+    public override ExportResult Export(in Batch<LogRecord> logRecordBatch)
+    {
+        // Prevents the exporter's gRPC and HTTP operations from being instrumented.
+        using var scope = SuppressInstrumentationScope.Begin();
+
+        var request = new OtlpCollector.ExportLogsServiceRequest();
+
+        try
         {
-            // Prevents the exporter's gRPC and HTTP operations from being instrumented.
-            using var scope = SuppressInstrumentationScope.Begin();
+            request.AddBatch(this.sdkLimitOptions, this.ProcessResource, logRecordBatch);
 
-            var request = new OtlpCollector.ExportLogsServiceRequest();
-
-            request.AddBatch(this.ProcessResource, logRecordBatch);
-
-            try
+            if (!this.exportClient.SendExportRequest(request))
             {
-                if (!this.exportClient.SendExportRequest(request))
-                {
-                    return ExportResult.Failure;
-                }
-            }
-            catch (Exception ex)
-            {
-                OpenTelemetryProtocolExporterEventSource.Log.ExportMethodException(ex);
                 return ExportResult.Failure;
             }
-
-            return ExportResult.Success;
         }
-
-        /// <inheritdoc />
-        protected override bool OnShutdown(int timeoutMilliseconds)
+        catch (Exception ex)
         {
-            return this.exportClient?.Shutdown(timeoutMilliseconds) ?? true;
+            OpenTelemetryProtocolExporterEventSource.Log.ExportMethodException(ex);
+            return ExportResult.Failure;
         }
+
+        return ExportResult.Success;
+    }
+
+    /// <inheritdoc />
+    protected override bool OnShutdown(int timeoutMilliseconds)
+    {
+        return this.exportClient?.Shutdown(timeoutMilliseconds) ?? true;
     }
 }

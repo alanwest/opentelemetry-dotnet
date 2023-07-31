@@ -14,60 +14,123 @@
 // limitations under the License.
 // </copyright>
 
-using System;
+using System.Diagnostics;
+#if NETFRAMEWORK
+using System.Net.Http;
+#endif
+using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Trace
+namespace OpenTelemetry.Trace;
+
+/// <summary>
+/// Extension methods to simplify registering a Jaeger exporter.
+/// </summary>
+public static class JaegerExporterHelperExtensions
 {
     /// <summary>
-    /// Extension methods to simplify registering a Jaeger exporter.
+    /// Adds Jaeger exporter to the TracerProvider.
     /// </summary>
-    public static class JaegerExporterHelperExtensions
+    /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
+    /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
+    public static TracerProviderBuilder AddJaegerExporter(this TracerProviderBuilder builder)
+        => AddJaegerExporter(builder, name: null, configure: null);
+
+    /// <summary>
+    /// Adds Jaeger exporter to the TracerProvider.
+    /// </summary>
+    /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
+    /// <param name="configure">Callback action for configuring <see cref="JaegerExporterOptions"/>.</param>
+    /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
+    public static TracerProviderBuilder AddJaegerExporter(this TracerProviderBuilder builder, Action<JaegerExporterOptions> configure)
+        => AddJaegerExporter(builder, name: null, configure);
+
+    /// <summary>
+    /// Adds Jaeger exporter to the TracerProvider.
+    /// </summary>
+    /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
+    /// <param name="name">Name which is used when retrieving options.</param>
+    /// <param name="configure">Callback action for configuring <see cref="JaegerExporterOptions"/>.</param>
+    /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
+    public static TracerProviderBuilder AddJaegerExporter(
+        this TracerProviderBuilder builder,
+        string name,
+        Action<JaegerExporterOptions> configure)
     {
-        /// <summary>
-        /// Adds Jaeger exporter to the TracerProvider.
-        /// </summary>
-        /// <param name="builder"><see cref="TracerProviderBuilder"/> builder to use.</param>
-        /// <param name="configure">Exporter configuration options.</param>
-        /// <returns>The instance of <see cref="TracerProviderBuilder"/> to chain the calls.</returns>
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The objects should not be disposed.")]
-        public static TracerProviderBuilder AddJaegerExporter(this TracerProviderBuilder builder, Action<JaegerExporterOptions> configure = null)
+        Guard.ThrowIfNull(builder);
+
+        name ??= Options.DefaultName;
+
+        builder.ConfigureServices(services =>
         {
-            if (builder == null)
+            if (configure != null)
             {
-                throw new ArgumentNullException(nameof(builder));
+                services.Configure(name, configure);
             }
 
-            if (builder is IDeferredTracerProviderBuilder deferredTracerProviderBuilder)
+            services.RegisterOptionsFactory(
+                (sp, configuration, name) => new JaegerExporterOptions(
+                    configuration,
+                    sp.GetRequiredService<IOptionsMonitor<BatchExportActivityProcessorOptions>>().Get(name)));
+        });
+
+        return builder.AddProcessor(sp =>
+        {
+            var options = sp.GetRequiredService<IOptionsMonitor<JaegerExporterOptions>>().Get(name);
+
+            return BuildJaegerExporterProcessor(options, sp);
+        });
+    }
+
+    private static BaseProcessor<Activity> BuildJaegerExporterProcessor(
+        JaegerExporterOptions options,
+        IServiceProvider serviceProvider)
+    {
+        if (options.Protocol == JaegerExportProtocol.HttpBinaryThrift
+            && options.HttpClientFactory == JaegerExporterOptions.DefaultHttpClientFactory)
+        {
+            options.HttpClientFactory = () =>
             {
-                return deferredTracerProviderBuilder.Configure((sp, builder) =>
+                Type httpClientFactoryType = Type.GetType("System.Net.Http.IHttpClientFactory, Microsoft.Extensions.Http", throwOnError: false);
+                if (httpClientFactoryType != null)
                 {
-                    AddJaegerExporter(builder, sp.GetOptions<JaegerExporterOptions>(), configure);
-                });
-            }
+                    object httpClientFactory = serviceProvider.GetService(httpClientFactoryType);
+                    if (httpClientFactory != null)
+                    {
+                        MethodInfo createClientMethod = httpClientFactoryType.GetMethod(
+                            "CreateClient",
+                            BindingFlags.Public | BindingFlags.Instance,
+                            binder: null,
+                            new Type[] { typeof(string) },
+                            modifiers: null);
+                        if (createClientMethod != null)
+                        {
+                            return (HttpClient)createClientMethod.Invoke(httpClientFactory, new object[] { "JaegerExporter" });
+                        }
+                    }
+                }
 
-            return AddJaegerExporter(builder, new JaegerExporterOptions(), configure);
+                return new HttpClient();
+            };
         }
 
-        private static TracerProviderBuilder AddJaegerExporter(TracerProviderBuilder builder, JaegerExporterOptions options, Action<JaegerExporterOptions> configure = null)
+        var jaegerExporter = new JaegerExporter(options);
+
+        if (options.ExportProcessorType == ExportProcessorType.Simple)
         {
-            configure?.Invoke(options);
-
-            var jaegerExporter = new JaegerExporter(options);
-
-            if (options.ExportProcessorType == ExportProcessorType.Simple)
-            {
-                return builder.AddProcessor(new SimpleActivityExportProcessor(jaegerExporter));
-            }
-            else
-            {
-                return builder.AddProcessor(new BatchActivityExportProcessor(
-                    jaegerExporter,
-                    options.BatchExportProcessorOptions.MaxQueueSize,
-                    options.BatchExportProcessorOptions.ScheduledDelayMilliseconds,
-                    options.BatchExportProcessorOptions.ExporterTimeoutMilliseconds,
-                    options.BatchExportProcessorOptions.MaxExportBatchSize));
-            }
+            return new SimpleActivityExportProcessor(jaegerExporter);
+        }
+        else
+        {
+            return new BatchActivityExportProcessor(
+                jaegerExporter,
+                options.BatchExportProcessorOptions.MaxQueueSize,
+                options.BatchExportProcessorOptions.ScheduledDelayMilliseconds,
+                options.BatchExportProcessorOptions.ExporterTimeoutMilliseconds,
+                options.BatchExportProcessorOptions.MaxExportBatchSize);
         }
     }
 }

@@ -14,23 +14,23 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 
+namespace ExtendingTheSdk;
+
 public class Program
 {
-    private static readonly Meter MyMeter = new Meter("MyCompany.MyProduct.MyLibrary", "1.0");
+    private static readonly Meter MyMeter = new("MyCompany.MyProduct.MyLibrary", "1.0");
     private static readonly Counter<long> MyFruitCounter = MyMeter.CreateCounter<long>("MyFruitCounter");
 
     static Program()
     {
         var process = Process.GetCurrentProcess();
 
-        MyMeter.CreateObservableGauge<long>(
+        MyMeter.CreateObservableGauge(
             "MyProcessWorkingSetGauge",
             () => new List<Measurement<long>>()
             {
@@ -38,14 +38,11 @@ public class Program
             });
     }
 
-    public static void Main(string[] args)
+    public static void Main()
     {
         using var meterProvider = Sdk.CreateMeterProviderBuilder()
             .AddMeter("MyCompany.MyProduct.MyLibrary")
-            /*
-            TODO: revisit once this exception is removed "System.InvalidOperationException: Only one Metricreader is allowed.".
-            .AddReader(new MyReader())
-            */
+            .AddReader(new BaseExportingMetricReader(new MyExporter("ExporterX")))
             .AddMyExporter()
             .Build();
 

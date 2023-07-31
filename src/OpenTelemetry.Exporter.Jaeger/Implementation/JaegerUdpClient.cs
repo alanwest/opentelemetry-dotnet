@@ -14,64 +14,45 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Net;
 using System.Net.Sockets;
 
-namespace OpenTelemetry.Exporter.Jaeger.Implementation
+namespace OpenTelemetry.Exporter.Jaeger.Implementation;
+
+internal sealed class JaegerUdpClient : IJaegerClient
 {
-    internal class JaegerUdpClient : IJaegerClient
+    private readonly string host;
+    private readonly int port;
+    private readonly UdpClient client;
+    private bool disposed;
+
+    public JaegerUdpClient(string host, int port)
     {
-        private readonly UdpClient client;
-        private bool disposed;
+        this.host = host;
+        this.port = port;
+        this.client = new UdpClient();
+    }
 
-        public JaegerUdpClient()
+    public bool Connected => this.client.Client.Connected;
+
+    public void Close() => this.client.Close();
+
+    public void Connect() => this.client.Connect(this.host, this.port);
+
+    public int Send(byte[] buffer, int offset, int count)
+    {
+        return this.client.Client.Send(buffer, offset, count, SocketFlags.None);
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (this.disposed)
         {
-            this.client = new UdpClient();
+            return;
         }
 
-        public bool Connected => this.client.Client.Connected;
+        this.client.Dispose();
 
-        public EndPoint RemoteEndPoint => this.client.Client.RemoteEndPoint;
-
-        public void Close() => this.client.Close();
-
-        public void Connect(string host, int port) => this.client.Connect(host, port);
-
-        public int Send(byte[] buffer)
-        {
-            return this.Send(buffer, 0, buffer?.Length ?? 0);
-        }
-
-        public int Send(byte[] buffer, int offset, int count)
-        {
-            return this.client.Client.Send(buffer, offset, count, SocketFlags.None);
-        }
-
-        /// <inheritdoc/>
-        public void Dispose()
-        {
-            this.Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Releases the unmanaged resources used by this class and optionally releases the managed resources.
-        /// </summary>
-        /// <param name="disposing"><see langword="true"/> to release both managed and unmanaged resources; <see langword="false"/> to release only unmanaged resources.</param>
-        protected virtual void Dispose(bool disposing)
-        {
-            if (this.disposed)
-            {
-                return;
-            }
-
-            if (disposing)
-            {
-                this.client.Dispose();
-            }
-
-            this.disposed = true;
-        }
+        this.disposed = true;
     }
 }

@@ -14,41 +14,37 @@
 // limitations under the License.
 // </copyright>
 
-using System.Collections.Generic;
-using System.Linq;
 using OpenTelemetry.Resources;
-using OtlpCommon = Opentelemetry.Proto.Common.V1;
-using OtlpResource = Opentelemetry.Proto.Resource.V1;
+using OtlpCommon = OpenTelemetry.Proto.Common.V1;
+using OtlpResource = OpenTelemetry.Proto.Resource.V1;
 
-namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation
+namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation;
+
+internal static class ResourceExtensions
 {
-    internal static class ResourceExtensions
+    public static OtlpResource.Resource ToOtlpResource(this Resource resource)
     {
-        public static OtlpResource.Resource ToOtlpResource(this Resource resource)
+        var processResource = new OtlpResource.Resource();
+
+        foreach (KeyValuePair<string, object> attribute in resource.Attributes)
         {
-            var processResource = new OtlpResource.Resource();
-
-            foreach (KeyValuePair<string, object> attribute in resource.Attributes)
+            if (OtlpKeyValueTransformer.Instance.TryTransformTag(attribute, out var result))
             {
-                var oltpAttribute = attribute.ToOtlpAttribute();
-                if (oltpAttribute != null)
-                {
-                    processResource.Attributes.Add(oltpAttribute);
-                }
+                processResource.Attributes.Add(result);
             }
-
-            if (!processResource.Attributes.Any(kvp => kvp.Key == ResourceSemanticConventions.AttributeServiceName))
-            {
-                var serviceName = (string)ResourceBuilder.CreateDefault().Build().Attributes.FirstOrDefault(
-                    kvp => kvp.Key == ResourceSemanticConventions.AttributeServiceName).Value;
-                processResource.Attributes.Add(new OtlpCommon.KeyValue
-                {
-                    Key = ResourceSemanticConventions.AttributeServiceName,
-                    Value = new OtlpCommon.AnyValue { StringValue = serviceName },
-                });
-            }
-
-            return processResource;
         }
+
+        if (!processResource.Attributes.Any(kvp => kvp.Key == ResourceSemanticConventions.AttributeServiceName))
+        {
+            var serviceName = (string)ResourceBuilder.CreateDefault().Build().Attributes.FirstOrDefault(
+                kvp => kvp.Key == ResourceSemanticConventions.AttributeServiceName).Value;
+            processResource.Attributes.Add(new OtlpCommon.KeyValue
+            {
+                Key = ResourceSemanticConventions.AttributeServiceName,
+                Value = new OtlpCommon.AnyValue { StringValue = serviceName },
+            });
+        }
+
+        return processResource;
     }
 }

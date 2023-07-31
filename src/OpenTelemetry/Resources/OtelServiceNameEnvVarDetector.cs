@@ -14,38 +14,36 @@
 // limitations under the License.
 // </copyright>
 
-using System;
-using System.Collections.Generic;
-using System.Security;
+#nullable enable
+
+using Microsoft.Extensions.Configuration;
 using OpenTelemetry.Internal;
 
-namespace OpenTelemetry.Resources
+namespace OpenTelemetry.Resources;
+
+internal sealed class OtelServiceNameEnvVarDetector : IResourceDetector
 {
-    internal class OtelServiceNameEnvVarDetector : IResourceDetector
+    public const string EnvVarKey = "OTEL_SERVICE_NAME";
+
+    private readonly IConfiguration configuration;
+
+    public OtelServiceNameEnvVarDetector(IConfiguration configuration)
     {
-        public const string EnvVarKey = "OTEL_SERVICE_NAME";
+        this.configuration = configuration;
+    }
 
-        public Resource Detect()
+    public Resource Detect()
+    {
+        var resource = Resource.Empty;
+
+        if (this.configuration.TryGetStringValue(EnvVarKey, out string? envResourceAttributeValue))
         {
-            var resource = Resource.Empty;
-
-            try
+            resource = new Resource(new Dictionary<string, object>
             {
-                string envResourceAttributeValue = Environment.GetEnvironmentVariable(EnvVarKey);
-                if (!string.IsNullOrEmpty(envResourceAttributeValue))
-                {
-                    resource = new Resource(new Dictionary<string, object>
-                    {
-                        [ResourceSemanticConventions.AttributeServiceName] = envResourceAttributeValue,
-                    });
-                }
-            }
-            catch (SecurityException ex)
-            {
-                OpenTelemetrySdkEventSource.Log.ResourceDetectorFailed(nameof(OtelServiceNameEnvVarDetector), ex.Message);
-            }
-
-            return resource;
+                [ResourceSemanticConventions.AttributeServiceName] = envResourceAttributeValue!,
+            });
         }
+
+        return resource;
     }
 }

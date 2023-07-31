@@ -17,41 +17,57 @@
 using Thrift.Protocol;
 using Thrift.Protocol.Entities;
 
-namespace OpenTelemetry.Exporter.Jaeger.Implementation
+namespace OpenTelemetry.Exporter.Jaeger.Implementation;
+
+internal sealed class EmitBatchArgs
 {
-    internal class EmitBatchArgs
+    public EmitBatchArgs(TProtocol protocol)
     {
-        public static void Send(int seqId, Batch batch, TProtocol oprot)
+        this.EmitBatchArgsBeginMessage = GenerateBeginMessage(protocol, out int seqIdPosition);
+        this.SeqIdPosition = seqIdPosition;
+        this.EmitBatchArgsEndMessage = GenerateEndMessage(protocol);
+    }
+
+    public byte[] EmitBatchArgsBeginMessage { get; }
+
+    public int SeqIdPosition { get; }
+
+    public byte[] EmitBatchArgsEndMessage { get; }
+
+    public int MinimumMessageSize => this.EmitBatchArgsBeginMessage.Length
+        + this.EmitBatchArgsEndMessage.Length;
+
+    private static byte[] GenerateBeginMessage(TProtocol oprot, out int seqIdPosition)
+    {
+        oprot.WriteMessageBegin(new TMessage("emitBatch", TMessageType.Oneway, 0), out seqIdPosition);
+
+        var struc = new TStruct("emitBatch_args");
+        oprot.WriteStructBegin(struc);
+
+        var field = new TField
         {
-            oprot.WriteMessageBegin(new TMessage("emitBatch", TMessageType.Oneway, seqId));
+            Name = "batch",
+            Type = TType.Struct,
+            ID = 1,
+        };
 
-            oprot.IncrementRecursionDepth();
-            try
-            {
-                var struc = new TStruct("emitBatch_args");
-                oprot.WriteStructBegin(struc);
+        oprot.WriteFieldBegin(field);
 
-                var field = new TField
-                {
-                    Name = "batch",
-                    Type = TType.Struct,
-                    ID = 1,
-                };
+        byte[] beginMessage = oprot.WrittenData.ToArray();
+        oprot.Clear();
+        return beginMessage;
+    }
 
-                oprot.WriteFieldBegin(field);
-                batch.Write(oprot);
-                oprot.WriteFieldEnd();
+    private static byte[] GenerateEndMessage(TProtocol oprot)
+    {
+        oprot.WriteFieldEnd();
+        oprot.WriteFieldStop();
+        oprot.WriteStructEnd();
 
-                oprot.WriteFieldStop();
-                oprot.WriteStructEnd();
-            }
-            finally
-            {
-                oprot.DecrementRecursionDepth();
-            }
+        oprot.WriteMessageEnd();
 
-            oprot.WriteMessageEnd();
-            oprot.Transport.Flush();
-        }
+        byte[] endMessage = oprot.WrittenData.ToArray();
+        oprot.Clear();
+        return endMessage;
     }
 }

@@ -17,53 +17,82 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
-#if NETCOREAPP3_1
-using TestApp.AspNetCore._3._1;
-#else
-using TestApp.AspNetCore._5._0;
-#endif
 using Xunit;
 
-namespace OpenTelemetry.Instrumentation.AspNetCore.Tests
+namespace OpenTelemetry.Instrumentation.AspNetCore.Tests;
+
+public class DependencyInjectionConfigTests
+    : IClassFixture<WebApplicationFactory<Program>>
 {
-    public class DependencyInjectionConfigTests
-        : IClassFixture<WebApplicationFactory<Startup>>
+    private readonly WebApplicationFactory<Program> factory;
+
+    public DependencyInjectionConfigTests(WebApplicationFactory<Program> factory)
     {
-        private readonly WebApplicationFactory<Startup> factory;
+        this.factory = factory;
+    }
 
-        public DependencyInjectionConfigTests(WebApplicationFactory<Startup> factory)
+    [Theory]
+    [InlineData(null)]
+    [InlineData("CustomName")]
+    public void TestTracingOptionsDIConfig(string name)
+    {
+        name ??= Options.DefaultName;
+
+        bool optionsPickedFromDI = false;
+        void ConfigureTestServices(IServiceCollection services)
         {
-            this.factory = factory;
+            services.AddOpenTelemetry()
+                .WithTracing(builder => builder
+                    .AddAspNetCoreInstrumentation(name, configureAspNetCoreInstrumentationOptions: null));
+
+            services.Configure<AspNetCoreInstrumentationOptions>(name, options =>
+            {
+                optionsPickedFromDI = true;
+            });
         }
 
-        [Fact]
-        public void TestDIConfig()
+        // Arrange
+        using (var client = this.factory
+            .WithWebHostBuilder(builder =>
+                builder.ConfigureTestServices(ConfigureTestServices))
+            .CreateClient())
         {
-            bool optionsPickedFromDI = false;
-            void ConfigureTestServices(IServiceCollection services)
-            {
-                services.AddOpenTelemetryTracing(
-                    builder =>
-                     {
-                         builder.AddAspNetCoreInstrumentation();
-                     });
-
-                services.Configure<AspNetCoreInstrumentationOptions>(options =>
-                {
-                    optionsPickedFromDI = true;
-                });
-            }
-
-            // Arrange
-            using (var client = this.factory
-                .WithWebHostBuilder(builder =>
-                    builder.ConfigureTestServices(ConfigureTestServices))
-                .CreateClient())
-            {
-            }
-
-            Assert.True(optionsPickedFromDI);
         }
+
+        Assert.True(optionsPickedFromDI);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("CustomName")]
+    public void TestMetricsOptionsDIConfig(string name)
+    {
+        name ??= Options.DefaultName;
+
+        bool optionsPickedFromDI = false;
+        void ConfigureTestServices(IServiceCollection services)
+        {
+            services.AddOpenTelemetry()
+                .WithMetrics(builder => builder
+                    .AddAspNetCoreInstrumentation(name, configureAspNetCoreInstrumentationOptions: null));
+
+            services.Configure<AspNetCoreMetricsInstrumentationOptions>(name, options =>
+            {
+                optionsPickedFromDI = true;
+            });
+        }
+
+        // Arrange
+        using (var client = this.factory
+            .WithWebHostBuilder(builder =>
+                builder.ConfigureTestServices(ConfigureTestServices))
+            .CreateClient())
+        {
+        }
+
+        Assert.True(optionsPickedFromDI);
     }
 }

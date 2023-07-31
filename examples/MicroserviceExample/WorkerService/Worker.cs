@@ -14,39 +14,35 @@
 // limitations under the License.
 // </copyright>
 
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Hosting;
 using Utils.Messaging;
 
-namespace WorkerService
+namespace WorkerService;
+
+public partial class Worker : BackgroundService
 {
-    public partial class Worker : BackgroundService
+    private readonly MessageReceiver messageReceiver;
+
+    public Worker(MessageReceiver messageReceiver)
     {
-        private readonly MessageReceiver messageReceiver;
+        this.messageReceiver = messageReceiver;
+    }
 
-        public Worker(MessageReceiver messageReceiver)
-        {
-            this.messageReceiver = messageReceiver;
-        }
+    public override Task StartAsync(CancellationToken cancellationToken)
+    {
+        return base.StartAsync(cancellationToken);
+    }
 
-        public override Task StartAsync(CancellationToken cancellationToken)
-        {
-            return base.StartAsync(cancellationToken);
-        }
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
+    }
 
-        public override async Task StopAsync(CancellationToken cancellationToken)
-        {
-            await base.StopAsync(cancellationToken);
-        }
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        stoppingToken.ThrowIfCancellationRequested();
 
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-        {
-            stoppingToken.ThrowIfCancellationRequested();
+        this.messageReceiver.StartConsumer();
 
-            this.messageReceiver.StartConsumer();
-
-            await Task.CompletedTask;
-        }
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 }

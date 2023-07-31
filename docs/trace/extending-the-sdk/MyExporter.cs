@@ -14,7 +14,6 @@
 // limitations under the License.
 // </copyright>
 
-using System;
 using System.Diagnostics;
 using System.Text;
 using OpenTelemetry;
@@ -45,7 +44,7 @@ internal class MyExporter : BaseExporter<Activity>
             sb.Append(activity.DisplayName);
         }
 
-        Console.WriteLine($"{this.name}.Export([{sb.ToString()}])");
+        Console.WriteLine($"{this.name}.Export([{sb}])");
         return ExportResult.Success;
     }
 
