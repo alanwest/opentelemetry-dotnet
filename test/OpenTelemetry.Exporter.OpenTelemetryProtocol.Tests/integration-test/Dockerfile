@@ -21,4 +21,3 @@ RUN apt-get update && apt-get install ca-certificates
 
 # This is for testing https when using the Google gRPC library (apps prior to .NET Core 3.0).
 ENV GRPC_DEFAULT_SSL_ROOTS_FILE_PATH /usr/local/share/ca-certificates/otel-collector.crt
-ENTRYPOINT ["dotnet", "vstest", "OpenTelemetry.Exporter.OpenTelemetryProtocol.Tests.dll", "--logger:console;verbosity=detailed"]

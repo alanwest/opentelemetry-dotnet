@@ -9,7 +9,7 @@ receivers:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
-        tls_settings:
+        tls:
           cert_file: /cfg/otel-collector.crt
           key_file: /cfg/otel-collector.key
       http:
