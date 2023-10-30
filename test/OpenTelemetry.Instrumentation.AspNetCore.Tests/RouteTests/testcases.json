@@ -4,6 +4,7 @@
         "httpMethod": "GET",
         "path": "/",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "ConventionalRoute/Default/{id?}",
         "expectedHttpRoute": "ConventionalRoute/Default/{id?}"
     },
     {
@@ -11,6 +12,7 @@
         "httpMethod": "GET",
         "path": "/ConventionalRoute/ActionWithStringParameter/2?num=3",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "ConventionalRoute/ActionWithStringParameter/{id?}",
         "expectedHttpRoute": "ConventionalRoute/ActionWithStringParameter/{id?}"
     },
     {
@@ -18,6 +20,7 @@
         "httpMethod": "GET",
         "path": "/ConventionalRoute/ActionWithStringParameter?num=3",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "ConventionalRoute/ActionWithStringParameter/{id?}",
         "expectedHttpRoute": "ConventionalRoute/ActionWithStringParameter/{id?}"
     },
     {
@@ -25,6 +28,7 @@
         "httpMethod": "GET",
         "path": "/ConventionalRoute/NotFound",
         "expectedStatusCode": 404,
+        "idealHttpRoute": "",
         "expectedHttpRoute": ""
     },
     {
@@ -32,6 +36,7 @@
         "httpMethod": "GET",
         "path": "/SomePath/SomeString/2",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "SomePath/{id}/{num:int}",
         "expectedHttpRoute": "SomePath/{id}/{num:int}"
     },
     {
@@ -39,6 +44,7 @@
         "httpMethod": "GET",
         "path": "/SomePath/SomeString/NotAnInt",
         "expectedStatusCode": 404,
+        "idealHttpRoute": "",
         "expectedHttpRoute": ""
     },
     {
@@ -46,6 +52,7 @@
         "httpMethod": "GET",
         "path": "/MyArea",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "{area:exists}/ControllerForMyArea/Default/{id?}",
         "expectedHttpRoute": "{area:exists}/ControllerForMyArea/Default/{id?}"
     },
     {
@@ -53,6 +60,7 @@
         "httpMethod": "GET",
         "path": "/MyArea/ControllerForMyArea/NonDefault",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "{area:exists}/ControllerForMyArea/NonDefault/{id?}",
         "expectedHttpRoute": "{area:exists}/ControllerForMyArea/NonDefault/{id?}"
     },
     {
@@ -60,6 +68,7 @@
         "httpMethod": "GET",
         "path": "/SomePrefix",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "SomePrefix/AnotherArea/Index/{id?}",
         "expectedHttpRoute": "SomePrefix/AnotherArea/Index/{id?}"
     },
     {
@@ -67,6 +76,7 @@
         "httpMethod": "GET",
         "path": "/AttributeRoute",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "AttributeRoute",
         "expectedHttpRoute": "AttributeRoute"
     },
     {
@@ -74,6 +84,7 @@
         "httpMethod": "GET",
         "path": "/AttributeRoute/Get",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "AttributeRoute/Get",
         "expectedHttpRoute": "AttributeRoute/Get"
     },
     {
@@ -81,6 +92,7 @@
         "httpMethod": "GET",
         "path": "/AttributeRoute/Get/12",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "AttributeRoute/Get/{id}",
         "expectedHttpRoute": "AttributeRoute/Get/{id}"
     },
     {
@@ -88,6 +100,7 @@
         "httpMethod": "GET",
         "path": "/AttributeRoute/12/GetWithActionNameInDifferentSpotInTemplate",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "AttributeRoute/{id}/GetWithActionNameInDifferentSpotInTemplate",
         "expectedHttpRoute": "AttributeRoute/{id}/GetWithActionNameInDifferentSpotInTemplate"
     },
     {
@@ -95,6 +108,7 @@
         "httpMethod": "GET",
         "path": "/AttributeRoute/NotAnInt/GetWithActionNameInDifferentSpotInTemplate",
         "expectedStatusCode": 400,
+        "idealHttpRoute": "AttributeRoute/{id}/GetWithActionNameInDifferentSpotInTemplate",
         "expectedHttpRoute": "AttributeRoute/{id}/GetWithActionNameInDifferentSpotInTemplate"
     },
     {
@@ -102,6 +116,7 @@
         "httpMethod": "GET",
         "path": "/",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "/Index",
         "expectedHttpRoute": "/Index"
     },
     {
@@ -109,6 +124,7 @@
         "httpMethod": "GET",
         "path": "/Index",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "/Index",
         "expectedHttpRoute": "/Index"
     },
     {
@@ -116,6 +132,7 @@
         "httpMethod": "GET",
         "path": "/PageThatThrowsException",
         "expectedStatusCode": 500,
+        "idealHttpRoute": "/PageThatThrowsException",
         "expectedHttpRoute": "/PageThatThrowsException"
     },
     {
@@ -123,22 +140,26 @@
         "httpMethod": "GET",
         "path": "/js/site.js",
         "expectedStatusCode": 200,
+        "idealHttpRoute": "",
         "expectedHttpRoute": ""
     },
     {
+        "minimumDotnetVersion": 7,
         "testApplicationScenario": "MinimalApi",
         "httpMethod": "GET",
         "path": "/MinimalApi",
         "expectedStatusCode": 200,
-        "expectedHttpRoute": "/MinimalApi/",
-        "minimumDotnetVersion": 7
+        "idealHttpRoute": "/MinimalApi/",
+        "expectedHttpRoute": "/MinimalApi/"
+
     },
     {
+        "minimumDotnetVersion": 7,
         "testApplicationScenario": "MinimalApi",
         "httpMethod": "GET",
         "path": "/MinimalApi/123",
         "expectedStatusCode": 200,
-        "expectedHttpRoute": "/MinimalApi/{id}",
-        "minimumDotnetVersion": 7
+        "idealHttpRoute": "/MinimalApi/{id}",
+        "expectedHttpRoute": "/MinimalApi/{id}"
     }
 ]

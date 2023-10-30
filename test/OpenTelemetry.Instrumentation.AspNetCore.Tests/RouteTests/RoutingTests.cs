@@ -57,7 +57,7 @@ public class RoutingTests : IClassFixture<RoutingTestFixture>, IDisposable
 
     [Theory]
     [MemberData(nameof(TestData))]
-    public async Task TestRoutes(RouteTestData.RouteTestCase testCase, bool skipAsserts = true, bool useLegacyConventions = true)
+    public async Task TestRoutes(RouteTestData.RouteTestCase testCase, bool useLegacyConventions = true)
     {
         await this.fixture.MakeRequest(testCase.TestApplicationScenario, testCase.Path);
 
@@ -95,16 +95,14 @@ public class RoutingTests : IClassFixture<RoutingTestFixture>, IDisposable
         Assert.Equal(testCase.HttpMethod, activityHttpMethod);
         Assert.Equal(testCase.HttpMethod, metricHttpMethod);
 
-        if (!skipAsserts)
-        {
-            Assert.Equal(testCase.ExpectedHttpRoute, activityHttpRoute);
-            Assert.Equal(testCase.ExpectedHttpRoute, metricHttpRoute);
+        Assert.Equal(testCase.ExpectedHttpRoute, activityHttpRoute);
 
-            var expectedActivityDisplayName = string.IsNullOrEmpty(testCase.ExpectedHttpRoute)
-                ? testCase.HttpMethod
-                : $"{testCase.HttpMethod} {testCase.ExpectedHttpRoute}";
-            Assert.Equal(expectedActivityDisplayName, activity.DisplayName);
-        }
+        // Assert.Equal(testCase.ExpectedHttpRoute, metricHttpRoute);
+
+        // var expectedActivityDisplayName = string.IsNullOrEmpty(testCase.ExpectedHttpRoute)
+        //     ? testCase.HttpMethod
+        //     : $"{testCase.HttpMethod} {testCase.ExpectedHttpRoute}";
+        // Assert.Equal(expectedActivityDisplayName, activity.DisplayName);
 
         var testResult = new TestResult
         {
