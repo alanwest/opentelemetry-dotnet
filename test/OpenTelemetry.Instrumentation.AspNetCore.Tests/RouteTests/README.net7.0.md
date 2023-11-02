@@ -2,26 +2,26 @@
 
 | Span http.route | Metric http.route | App | Test Name |
 | - | - | - | - |
-| :broken_heart: | :broken_heart: | ConventionalRouting | [Root path](#conventionalrouting-Root-path) |
-| :broken_heart: | :broken_heart: | ConventionalRouting | [Non-default action with route parameter and query string parameter](#conventionalrouting-Non-default-action-with-route-parameter-and-query-string-parameter) |
-| :broken_heart: | :broken_heart: | ConventionalRouting | [Non-default action with query string parameter](#conventionalrouting-Non-default-action-with-query-string-parameter) |
-| :broken_heart: | :broken_heart: | ConventionalRouting | [Not Found (404)](#conventionalrouting-Not-Found-(404)) |
-| :broken_heart: | :green_heart: | ConventionalRouting | [Route template with parameter constraint](#conventionalrouting-Route-template-with-parameter-constraint) |
-| :broken_heart: | :green_heart: | ConventionalRouting | [Path that does not match parameter constraint](#conventionalrouting-Path-that-does-not-match-parameter-constraint) |
-| :broken_heart: | :broken_heart: | ConventionalRouting | [Area using area:exists, default controller/action](#conventionalrouting-Area-using-area:exists,-default-controller/action) |
-| :broken_heart: | :broken_heart: | ConventionalRouting | [Area using area:exists, non-default action](#conventionalrouting-Area-using-area:exists,-non-default-action) |
-| :broken_heart: | :broken_heart: | ConventionalRouting | [Area w/o area:exists, default controller/action](#conventionalrouting-Area-w/o-area:exists,-default-controller/action) |
-| :green_heart: | :green_heart: | AttributeRouting | [Default action](#attributerouting-Default-action) |
-| :green_heart: | :green_heart: | AttributeRouting | [Action without parameter](#attributerouting-Action-without-parameter) |
-| :green_heart: | :green_heart: | AttributeRouting | [Action with parameter](#attributerouting-Action-with-parameter) |
-| :green_heart: | :green_heart: | AttributeRouting | [Action with parameter before action name in template](#attributerouting-Action-with-parameter-before-action-name-in-template) |
-| :green_heart: | :green_heart: | AttributeRouting | [Action invoked resulting in 400 Bad Request](#attributerouting-Action-invoked-resulting-in-400-Bad-Request) |
-| :broken_heart: | :broken_heart: | RazorPages | [Root path](#razorpages-Root-path) |
-| :broken_heart: | :broken_heart: | RazorPages | [Index page](#razorpages-Index-page) |
-| :broken_heart: | :broken_heart: | RazorPages | [Throws exception](#razorpages-Throws-exception) |
-| :green_heart: | :green_heart: | RazorPages | [Static content](#razorpages-Static-content) |
-| :broken_heart: | :green_heart: | MinimalApi | [Action without parameter](#minimalapi-Action-without-parameter) |
-| :broken_heart: | :green_heart: | MinimalApi | [Action with parameter](#minimalapi-Action-with-parameter) |
+| :broken_heart: | :broken_heart: | ConventionalRouting | [Root path](#conventionalrouting-Root path) |
+| :broken_heart: | :broken_heart: | ConventionalRouting | [Non-default action with route parameter and query string parameter](#conventionalrouting-Nondefault action with route parameter and query string parameter) |
+| :broken_heart: | :broken_heart: | ConventionalRouting | [Non-default action with query string parameter](#conventionalrouting-Nondefault action with query string parameter) |
+| :broken_heart: | :broken_heart: | ConventionalRouting | [Not Found (404)](#conventionalrouting-Not Found 404) |
+| :broken_heart: | :green_heart: | ConventionalRouting | [Route template with parameter constraint](#conventionalrouting-Route template with parameter constraint) |
+| :broken_heart: | :green_heart: | ConventionalRouting | [Path that does not match parameter constraint](#conventionalrouting-Path that does not match parameter constraint) |
+| :broken_heart: | :broken_heart: | ConventionalRouting | [Area using area:exists, default controller/action](#conventionalrouting-Area using areaexists default controlleraction) |
+| :broken_heart: | :broken_heart: | ConventionalRouting | [Area using area:exists, non-default action](#conventionalrouting-Area using areaexists nondefault action) |
+| :broken_heart: | :broken_heart: | ConventionalRouting | [Area w/o area:exists, default controller/action](#conventionalrouting-Area wo areaexists default controlleraction) |
+| :green_heart: | :green_heart: | AttributeRouting | [Default action](#attributerouting-Default action) |
+| :green_heart: | :green_heart: | AttributeRouting | [Action without parameter](#attributerouting-Action without parameter) |
+| :green_heart: | :green_heart: | AttributeRouting | [Action with parameter](#attributerouting-Action with parameter) |
+| :green_heart: | :green_heart: | AttributeRouting | [Action with parameter before action name in template](#attributerouting-Action with parameter before action name in template) |
+| :green_heart: | :green_heart: | AttributeRouting | [Action invoked resulting in 400 Bad Request](#attributerouting-Action invoked resulting in 400 Bad Request) |
+| :broken_heart: | :broken_heart: | RazorPages | [Root path](#razorpages-Root path) |
+| :broken_heart: | :broken_heart: | RazorPages | [Index page](#razorpages-Index page) |
+| :broken_heart: | :broken_heart: | RazorPages | [Throws exception](#razorpages-Throws exception) |
+| :green_heart: | :green_heart: | RazorPages | [Static content](#razorpages-Static content) |
+| :broken_heart: | :green_heart: | MinimalApi | [Action without parameter](#minimalapi-Action without parameter) |
+| :broken_heart: | :green_heart: | MinimalApi | [Action with parameter](#minimalapi-Action with parameter) |
 
 ## ConventionalRouting: Root path
 

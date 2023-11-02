@@ -114,6 +114,7 @@ public class RoutingTestFixture : IDisposable
 
     private string MakeAnchorTag(TestApplicationScenario scenario, string name)
     {
-        return $"#{scenario.ToString().ToLower()}-{name.Replace(' ', '-')}";
+        var n = new string(name.ToCharArray().Where(c => !char.IsPunctuation(c)).ToArray());
+        return $"#{scenario.ToString().ToLower()}-{n}";
     }
 }
