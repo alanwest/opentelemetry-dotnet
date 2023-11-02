@@ -18,7 +18,6 @@
 
 using System.Text;
 using System.Text.Json;
-using Castle.Components.DictionaryAdapter;
 using Microsoft.AspNetCore.Builder;
 
 namespace RouteTests;
@@ -114,7 +113,16 @@ public class RoutingTestFixture : IDisposable
 
     private string MakeAnchorTag(TestApplicationScenario scenario, string name)
     {
-        var n = new string(name.ToCharArray().Where(c => !char.IsPunctuation(c)).ToArray());
-        return $"#{scenario.ToString().ToLower()}-{n}";
+        var chars = name.ToCharArray()
+            .Where(c => !char.IsPunctuation(c) || c == '-')
+            .Select(c => c switch
+            {
+                '-' => '-',
+                ' ' => '-',
+                _ => char.ToLower(c),
+            })
+            .ToArray();
+
+        return $"#{scenario.ToString().ToLower()}-{new string(chars)}";
     }
 }
