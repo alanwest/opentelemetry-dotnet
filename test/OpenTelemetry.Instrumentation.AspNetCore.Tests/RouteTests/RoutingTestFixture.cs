@@ -18,6 +18,7 @@
 
 using System.Text;
 using System.Text.Json;
+using Castle.Components.DictionaryAdapter;
 using Microsoft.AspNetCore.Builder;
 
 namespace RouteTests;
@@ -84,17 +85,16 @@ public class RoutingTestFixture : IDisposable
         var sb = new StringBuilder();
         sb.AppendLine($"# Test results for ASP.NET Core {Environment.Version.Major}");
         sb.AppendLine();
-        sb.AppendLine("| ADN | AR | MR | App | Test Name |");
-        sb.AppendLine("| - | - | - | - | - |");
+        sb.AppendLine("| Span http.route | Metric http.route | App | Test Name |");
+        sb.AppendLine("| - | - | - | - |");
 
         for (var i = 0; i < this.testResults.Count; ++i)
         {
             var result = this.testResults[i];
-            var emoji1 = result.TestCase.CurrentActivityDisplayName == null ? ":green_heart:" : ":broken_heart:";
-            var emoji2 = result.TestCase.CurrentActivityHttpRoute == null ? ":green_heart:" : ":broken_heart:";
-            var emoji3 = result.TestCase.CurrentMetricHttpRoute == null ? ":green_heart:" : ":broken_heart:";
-            sb.Append($"| {emoji1} | {emoji2} | {emoji3} | ");
-            sb.AppendLine($" {result.TestCase.TestApplicationScenario} | {result.TestCase.Name} |");
+            var emoji1 = result.TestCase.CurrentActivityHttpRoute == null ? ":green_heart:" : ":broken_heart:";
+            var emoji2 = result.TestCase.CurrentMetricHttpRoute == null ? ":green_heart:" : ":broken_heart:";
+            sb.Append($"| {emoji1} | {emoji2} ");
+            sb.AppendLine($"| {result.TestCase.TestApplicationScenario} | [{result.TestCase.Name}]({this.MakeAnchorTag(result.TestCase.TestApplicationScenario, result.TestCase.Name)}) |");
         }
 
         for (var i = 0; i < this.testResults.Count; ++i)
@@ -110,5 +110,10 @@ public class RoutingTestFixture : IDisposable
 
         var readmeFileName = $"README.net{Environment.Version.Major}.0.md";
         File.WriteAllText(Path.Combine("..", "..", "..", "RouteTests", readmeFileName), sb.ToString());
+    }
+
+    private string MakeAnchorTag(TestApplicationScenario scenario, string name)
+    {
+        return $"#{scenario.ToString().ToLower()}-{name.Replace(' ', '-')}";
     }
 }
