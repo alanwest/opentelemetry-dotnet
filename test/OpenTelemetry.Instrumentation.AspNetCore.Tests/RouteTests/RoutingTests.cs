@@ -97,35 +97,16 @@ public class RoutingTests : IClassFixture<RoutingTestFixture>
         Assert.Equal(testCase.HttpMethod, activityHttpMethod);
         Assert.Equal(testCase.HttpMethod, metricHttpMethod);
 
-        // TODO: The CurrentActivityDisplayName, CurrentActivityHttpRoute, and CurrentMetricHttpRoute
-        // properties will go away. They only serve to capture status quo. The "else" blocks are the real
-        // asserts that we ultimately want.
-        // If any of the current properties are null, then that means we already conform to the
+        var expectedActivityDisplayName = string.IsNullOrEmpty(testCase.ExpectedHttpRoute)
+            ? testCase.HttpMethod
+            : $"{testCase.HttpMethod} {testCase.ExpectedHttpRoute}";
+
+        Assert.Equal(expectedActivityDisplayName, activity.DisplayName);
+        Assert.Equal(testCase.ExpectedHttpRoute, activityHttpRoute);
+
+        // TODO: The CurrentMetricHttpRoute property will go away once http.route is fixed for metrics.
+        // For any test case where CurrentMetricHttpRoute is null, then that means we already conform to the
         // correct behavior.
-        if (testCase.CurrentActivityDisplayName != null)
-        {
-            Assert.Equal(testCase.CurrentActivityDisplayName, activity.DisplayName);
-        }
-        else
-        {
-            // Activity.DisplayName should be a combination of http.method + http.route attributes, see:
-            // https://github.com/open-telemetry/semantic-conventions/blob/main/docs/http/http-spans.md#name
-            var expectedActivityDisplayName = string.IsNullOrEmpty(testCase.ExpectedHttpRoute)
-                ? testCase.HttpMethod
-                : $"{testCase.HttpMethod} {testCase.ExpectedHttpRoute}";
-
-            Assert.Equal(expectedActivityDisplayName, activity.DisplayName);
-        }
-
-        if (testCase.CurrentActivityHttpRoute != null)
-        {
-            Assert.Equal(testCase.CurrentActivityHttpRoute, activityHttpRoute);
-        }
-        else
-        {
-            Assert.Equal(testCase.ExpectedHttpRoute, activityHttpRoute);
-        }
-
         if (testCase.CurrentMetricHttpRoute != null)
         {
             Assert.Equal(testCase.CurrentMetricHttpRoute, metricHttpRoute);

@@ -5,8 +5,6 @@
     "httpMethod": "GET",
     "path": "/",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": "{controller=ConventionalRoute}/{action=Default}/{id?}",
     "expectedHttpRoute": "ConventionalRoute/Default/{id?}"
   },
@@ -16,8 +14,6 @@
     "httpMethod": "GET",
     "path": "/ConventionalRoute/ActionWithStringParameter/2?num=3",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/ConventionalRoute/ActionWithStringParameter/2",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": "{controller=ConventionalRoute}/{action=Default}/{id?}",
     "expectedHttpRoute": "ConventionalRoute/ActionWithStringParameter/{id?}"
   },
@@ -27,8 +23,6 @@
     "httpMethod": "GET",
     "path": "/ConventionalRoute/ActionWithStringParameter?num=3",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/ConventionalRoute/ActionWithStringParameter",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": "{controller=ConventionalRoute}/{action=Default}/{id?}",
     "expectedHttpRoute": "ConventionalRoute/ActionWithStringParameter/{id?}"
   },
@@ -38,8 +32,6 @@
     "httpMethod": "GET",
     "path": "/ConventionalRoute/NotFound",
     "expectedStatusCode": 404,
-    "currentActivityDisplayName": "/ConventionalRoute/NotFound",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": "",
     "expectedHttpRoute": ""
   },
@@ -49,8 +41,6 @@
     "httpMethod": "GET",
     "path": "/SomePath/SomeString/2",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/SomePath/SomeString/2",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": null,
     "expectedHttpRoute": "SomePath/{id}/{num:int}"
   },
@@ -60,8 +50,6 @@
     "httpMethod": "GET",
     "path": "/SomePath/SomeString/NotAnInt",
     "expectedStatusCode": 404,
-    "currentActivityDisplayName": "/SomePath/SomeString/NotAnInt",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": null,
     "expectedHttpRoute": ""
   },
@@ -71,8 +59,6 @@
     "httpMethod": "GET",
     "path": "/MyArea",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/MyArea",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": "{area:exists}/{controller=ControllerForMyArea}/{action=Default}/{id?}",
     "expectedHttpRoute": "{area:exists}/ControllerForMyArea/Default/{id?}"
   },
@@ -82,8 +68,6 @@
     "httpMethod": "GET",
     "path": "/MyArea/ControllerForMyArea/NonDefault",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/MyArea/ControllerForMyArea/NonDefault",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": "{area:exists}/{controller=ControllerForMyArea}/{action=Default}/{id?}",
     "expectedHttpRoute": "{area:exists}/ControllerForMyArea/NonDefault/{id?}"
   },
@@ -93,8 +77,6 @@
     "httpMethod": "GET",
     "path": "/SomePrefix",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/SomePrefix",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": "SomePrefix/{controller=AnotherArea}/{action=Index}/{id?}",
     "expectedHttpRoute": "SomePrefix/AnotherArea/Index/{id?}"
   },
@@ -104,8 +86,6 @@
     "httpMethod": "GET",
     "path": "/AttributeRoute",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "AttributeRoute",
-    "currentActivityHttpRoute": null,
     "currentMetricHttpRoute": null,
     "expectedHttpRoute": "AttributeRoute"
   },
@@ -115,8 +95,6 @@
     "httpMethod": "GET",
     "path": "/AttributeRoute/Get",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "AttributeRoute/Get",
-    "currentActivityHttpRoute": null,
     "currentMetricHttpRoute": null,
     "expectedHttpRoute": "AttributeRoute/Get"
   },
@@ -126,8 +104,6 @@
     "httpMethod": "GET",
     "path": "/AttributeRoute/Get/12",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "AttributeRoute/Get/{id}",
-    "currentActivityHttpRoute": null,
     "currentMetricHttpRoute": null,
     "expectedHttpRoute": "AttributeRoute/Get/{id}"
   },
@@ -137,8 +113,6 @@
     "httpMethod": "GET",
     "path": "/AttributeRoute/12/GetWithActionNameInDifferentSpotInTemplate",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "AttributeRoute/{id}/GetWithActionNameInDifferentSpotInTemplate",
-    "currentActivityHttpRoute": null,
     "currentMetricHttpRoute": null,
     "expectedHttpRoute": "AttributeRoute/{id}/GetWithActionNameInDifferentSpotInTemplate"
   },
@@ -148,8 +122,6 @@
     "httpMethod": "GET",
     "path": "/AttributeRoute/NotAnInt/GetWithActionNameInDifferentSpotInTemplate",
     "expectedStatusCode": 400,
-    "currentActivityDisplayName": "AttributeRoute/{id}/GetWithActionNameInDifferentSpotInTemplate",
-    "currentActivityHttpRoute": null,
     "currentMetricHttpRoute": null,
     "expectedHttpRoute": "AttributeRoute/{id}/GetWithActionNameInDifferentSpotInTemplate"
   },
@@ -159,8 +131,6 @@
     "httpMethod": "GET",
     "path": "/",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": "",
     "expectedHttpRoute": "/Index"
   },
@@ -170,8 +140,6 @@
     "httpMethod": "GET",
     "path": "/Index",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "Index",
-    "currentActivityHttpRoute": "Index",
     "currentMetricHttpRoute": "Index",
     "expectedHttpRoute": "/Index"
   },
@@ -181,8 +149,6 @@
     "httpMethod": "GET",
     "path": "/PageThatThrowsException",
     "expectedStatusCode": 500,
-    "currentActivityDisplayName": "PageThatThrowsException",
-    "currentActivityHttpRoute": "PageThatThrowsException",
     "currentMetricHttpRoute": "PageThatThrowsException",
     "expectedHttpRoute": "/PageThatThrowsException"
   },
@@ -192,8 +158,6 @@
     "httpMethod": "GET",
     "path": "/js/site.js",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/js/site.js",
-    "currentActivityHttpRoute": null,
     "currentMetricHttpRoute": null,
     "expectedHttpRoute": ""
   },
@@ -204,8 +168,6 @@
     "httpMethod": "GET",
     "path": "/MinimalApi",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/MinimalApi",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": null,
     "expectedHttpRoute": "/MinimalApi/"
   },
@@ -216,8 +178,6 @@
     "httpMethod": "GET",
     "path": "/MinimalApi/123",
     "expectedStatusCode": 200,
-    "currentActivityDisplayName": "/MinimalApi/123",
-    "currentActivityHttpRoute": "",
     "currentMetricHttpRoute": null,
     "expectedHttpRoute": "/MinimalApi/{id}"
   }
